@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Affine Agent Launchpad</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f1219;
+        --surface: #171c28;
+        --surface-2: #1e2433;
+        --border: #2a3347;
+        --text: #e8ecf4;
+        --muted: #8b95a8;
+        --accent: #3d8bfd;
+        --accent-dim: #2a5fad;
+        --success: #3ecf8e;
+        --success-bg: rgba(62, 207, 142, 0.12);
+        --pending: #6b7280;
+        --err: #fca5a5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "DM Sans", system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .header {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .header h1 { margin: 0; font-size: 1.15rem; }
+      .header p { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--muted); }
+      .main {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr minmax(300px, 380px);
+        min-height: 0;
+      }
+      @media (max-width: 900px) {
+        .main { grid-template-columns: 1fr; }
+      }
+      .chat {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        min-height: 60vh;
+      }
+      .chat h2, .spec h2 { margin: 0; font-size: 1rem; }
+      .chat-head { padding: 1.25rem 1.5rem 0.5rem; }
+      .chat-head .sub { font-size: 0.85rem; color: var(--muted); margin-top: 0.35rem; }
+      .messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .bubble {
+        max-width: 85%;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .bubble .role {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .bubble.user { align-self: flex-end; background: var(--accent-dim); border: 1px solid var(--accent); }
+      .bubble.assistant { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); }
+      .start-box { padding: 1rem 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; flex: 1; }
+      .start-box label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+      textarea, input[type="text"] {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 0.9rem;
+      }
+      textarea { min-height: 140px; resize: vertical; }
+      .btn {
+        padding: 0.55rem 1.1rem;
+        border-radius: 8px;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        font-family: inherit;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0 1.5rem 0.75rem; }
+      .chip {
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        font-size: 0.8rem;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .chip:hover:not(:disabled) { border-color: var(--accent); }
+      .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+      .compose {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem 1.25rem;
+        border-top: 1px solid var(--border);
+      }
+      .compose input { flex: 1; }
+      .error {
+        margin: 0 1.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--err);
+        font-size: 0.85rem;
+      }
+      .ready-banner {
+        margin: 0 1.5rem 1.25rem;
+        padding: 1rem;
+        border-radius: 8px;
+        background: var(--success-bg);
+        border: 1px solid var(--success);
+        color: var(--success);
+        font-size: 0.9rem;
+      }
+      .spec {
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .spec-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.25rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .badge {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+      }
+      .badge.draft { background: rgba(139, 149, 168, 0.2); color: var(--muted); }
+      .badge.ready { background: var(--success-bg); color: var(--success); }
+      .progress { padding: 0.75rem 1.25rem; }
+      .progress-bar {
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .progress-fill { height: 100%; background: var(--success); transition: width 0.3s; }
+      .progress-label { font-size: 0.75rem; color: var(--muted); margin: 0.4rem 0 0; }
+      .checklist { list-style: none; margin: 0; padding: 0 1.25rem 0.75rem; font-size: 0.78rem; }
+      .checklist li { color: var(--muted); margin-bottom: 0.3rem; }
+      .checklist li.done { color: var(--success); }
+      .fields {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem 1.25rem 1.25rem;
+        border-top: 1px solid var(--border);
+      }
+      .field { margin-bottom: 1rem; }
+      .field dt {
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+      .field dd { margin: 0; font-size: 0.88rem; }
+      .field dd.pending { color: var(--pending); font-style: italic; }
+      .field dd.known { color: var(--success); }
+      .field-group-title {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+        margin: 1rem 0 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+      }
+      .field-group-title:first-child { border-top: none; margin-top: 0; }
+      .blueprint {
+        margin: 0 1.25rem 1.25rem;
+        padding: 1rem;
+        border-radius: 8px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        max-height: 280px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .blueprint h2 { font-size: 0.9rem; margin: 0.75rem 0 0.35rem; color: var(--text); }
+      .blueprint h2:first-child { margin-top: 0; }
+      .hidden { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <h1>Affine Agent Launchpad</h1>
+      <p>Phase 2 — Requirements & architectural flow interview</p>
+    </header>
+
+    <main class="main">
+      <section class="chat" id="chat-section">
+        <div class="chat-head">
+          <h2>Requirements interview</h2>
+          <p class="sub" id="chat-subtitle">
+            Describe the system you want to build — requirements and architectural flow.
+          </p>
+        </div>
+
+        <div id="start-view" class="start-box">
+          <label for="problem">Problem statement</label>
+          <textarea
+            id="problem"
+            placeholder="e.g. We need an agent to pre-screen KYC applications…"
+          ></textarea>
+          <p id="error-start" class="error hidden"></p>
+          <button type="button" class="btn" id="btn-start">Start interview</button>
+        </div>
+
+        <div id="session-view" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+          <div class="messages" id="messages" role="log"></div>
+          <p id="error-session" class="error hidden"></p>
+          <div id="ready-banner" class="ready-banner hidden"></div>
+          <div class="chips" id="chips"></div>
+          <form class="compose" id="compose-form">
+            <input type="text" id="answer-input" placeholder="Or type a custom answer…" />
+            <button type="submit" class="btn">Send</button>
+          </form>
+        </div>
+      </section>
+
+      <aside class="spec" id="spec-panel">
+        <div class="spec-head">
+          <h2>Specification</h2>
+          <span class="badge draft" id="spec-badge">—</span>
+        </div>
+        <div id="spec-placeholder" style="padding:1.25rem;color:var(--muted);font-size:0.9rem">
+          Start the interview to see fields update here.
+        </div>
+        <div id="spec-content" class="hidden">
+          <div class="progress">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <p class="progress-label" id="progress-label"></p>
+          </div>
+          <ul class="checklist" id="checklist"></ul>
+          <dl class="fields" id="fields"></dl>
+          <div id="blueprint-panel" class="hidden">
+            <h3 class="field-group-title">Architecture blueprint</h3>
+            <div class="blueprint" id="blueprint-text"></div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const FIELD_GROUPS = {
+        requirements: {
+          title: "Requirements",
+          keys: [
+            "use_case",
+            "data_volume",
+            "accuracy_target",
+            "hitl_behavior",
+            "integrations",
+            "latency_target",
+            "model_preference",
+            "deployment_platform",
+          ],
+        },
+        architecture: {
+          title: "Architectural flow",
+          keys: [
+            "architectural_flow",
+            "architectural_flow_feedback",
+            "architectural_pattern",
+            "core_components",
+            "data_flow",
+            "orchestration_model",
+            "scalability_constraints",
+          ],
+        },
+      };
+      const ALL_FIELDS = [
+        ...FIELD_GROUPS.requirements.keys,
+        ...FIELD_GROUPS.architecture.keys,
+      ];
+
+      let session = null;
+      let loading = false;
+
+      async function startSession(problemStatement) {
+        const res = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ problem_statement: problemStatement }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        return data.session;
+      }
+
+      async function submitTurn(sessionId, answer) {
+        const res = await fetch(`/api/sessions/${sessionId}/turn`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answer }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        return data.session;
+      }
+
+      function setLoading(on) {
+        loading = on;
+        document.getElementById("btn-start").disabled = on;
+        document.getElementById("answer-input").disabled = on || !canReply();
+        document.querySelector("#compose-form button").disabled = on || !canReply();
+        document.querySelectorAll(".chip").forEach((b) => (b.disabled = on || !canReply()));
+      }
+
+      function canReply() {
+        return (
+          session &&
+          session.spec.status !== "ready" &&
+          session.pending_question &&
+          !loading
+        );
+      }
+
+      function showError(id, msg) {
+        const el = document.getElementById(id);
+        if (!msg) {
+          el.classList.add("hidden");
+          el.textContent = "";
+          return;
+        }
+        el.textContent = msg;
+        el.classList.remove("hidden");
+      }
+
+      function renderSpec(spec) {
+        document.getElementById("spec-placeholder").classList.add("hidden");
+        document.getElementById("spec-content").classList.remove("hidden");
+
+        const badge = document.getElementById("spec-badge");
+        badge.textContent = spec.status === "ready" ? "Ready" : "In progress";
+        badge.className = "badge " + spec.status;
+
+        const known = ALL_FIELDS.filter(
+          (k) => spec.fields[k]?.status === "known" && spec.fields[k]?.value
+        ).length;
+        const total = ALL_FIELDS.length;
+        const pct = Math.round((known / total) * 100);
+        document.getElementById("progress-fill").style.width = pct + "%";
+        document.getElementById("progress-label").textContent =
+          `${known} of ${total} fields confirmed (${pct}%)`;
+
+        const checklist = document.getElementById("checklist");
+        checklist.innerHTML = ALL_FIELDS.map((key) => {
+          const f = spec.fields[key];
+          const done = f?.status === "known" && f?.value;
+          return `<li class="${done ? "done" : ""}">${done ? "✓" : "○"} ${f?.label || key}</li>`;
+        }).join("");
+
+        const fields = document.getElementById("fields");
+        fields.innerHTML = Object.values(FIELD_GROUPS)
+          .map(
+            (group) =>
+              `<h3 class="field-group-title">${group.title}</h3>` +
+              group.keys
+                .map((key) => {
+                  const f = spec.fields[key];
+                  const knownField = f?.status === "known" && f?.value;
+                  return `<div class="field"><dt>${f?.label || key}</dt><dd class="${knownField ? "known" : "pending"}">${knownField ? escapeHtml(f.value) : "Pending…"}</dd></div>`;
+                })
+                .join("")
+          )
+          .join("");
+
+        const bpPanel = document.getElementById("blueprint-panel");
+        const bpText = document.getElementById("blueprint-text");
+        if (spec.architecture_blueprint) {
+          bpPanel.classList.remove("hidden");
+          bpText.textContent = spec.architecture_blueprint;
+        } else {
+          bpPanel.classList.add("hidden");
+          bpText.textContent = "";
+        }
+      }
+
+      function escapeHtml(s) {
+        const d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function renderMessages(messages) {
+        const box = document.getElementById("messages");
+        box.innerHTML = messages
+          .map(
+            (m) =>
+              `<div class="bubble ${m.role}"><span class="role">${m.role === "user" ? "You" : "Launchpad"}</span><p>${escapeHtml(m.content)}</p></div>`
+          )
+          .join("");
+        box.scrollTop = box.scrollHeight;
+      }
+
+      function renderSession() {
+        if (!session) return;
+
+        document.getElementById("start-view").classList.add("hidden");
+        const sv = document.getElementById("session-view");
+        sv.classList.remove("hidden");
+        sv.style.display = "flex";
+
+        document.getElementById("chat-subtitle").textContent =
+          "Session " + session.id.slice(0, 8);
+
+        renderMessages(session.messages);
+        renderSpec(session.spec);
+
+        const ready = session.spec.status === "ready";
+        const banner = document.getElementById("ready-banner");
+        if (ready) {
+          banner.textContent =
+            "Requirements and architectural flow are complete. Review the blueprint below — ready for Phase 3.";
+          banner.classList.remove("hidden");
+          document.getElementById("chips").innerHTML = "";
+          document.getElementById("compose-form").classList.add("hidden");
+        } else {
+          banner.classList.add("hidden");
+          document.getElementById("compose-form").classList.remove("hidden");
+          const chips = session.pending_question?.chips || [];
+          document.getElementById("chips").innerHTML = chips
+            .map(
+              (c) =>
+                `<button type="button" class="chip" data-answer="${escapeHtml(c).replace(/"/g, "&quot;")}">${escapeHtml(c)}</button>`
+            )
+            .join("");
+          document.querySelectorAll(".chip").forEach((btn) => {
+            btn.addEventListener("click", () => handleAnswer(btn.textContent));
+          });
+        }
+
+        setLoading(loading);
+      }
+
+      async function handleAnswer(answer) {
+        if (!session || !canReply()) return;
+        showError("error-session", null);
+        setLoading(true);
+        renderSession();
+        try {
+          session = await submitTurn(session.id, answer.trim());
+          document.getElementById("answer-input").value = "";
+        } catch (e) {
+          showError("error-session", e.message);
+        } finally {
+          setLoading(false);
+          renderSession();
+        }
+      }
+
+      document.getElementById("btn-start").addEventListener("click", async () => {
+        const problem = document.getElementById("problem").value.trim();
+        if (problem.length < 10) {
+          showError("error-start", "Please enter at least 10 characters.");
+          return;
+        }
+        showError("error-start", null);
+        setLoading(true);
+        try {
+          session = await startSession(problem);
+          renderSession();
+        } catch (e) {
+          showError("error-start", e.message);
+        } finally {
+          setLoading(false);
+        }
+      });
+
+      document.getElementById("compose-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const v = document.getElementById("answer-input").value.trim();
+        if (v) handleAnswer(v);
+      });
+    </script>
+  </body>
+</html>

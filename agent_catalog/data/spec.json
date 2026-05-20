@@ -1,0 +1,292 @@
+{
+  "project": {
+    "name": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+    "client": "JPMorgan Chase (JPMC)",
+    "vertical": "Finance",
+    "business_problem": "The client was manually reviewing corporate KYC documents to extract entities, UBOs, and ownership structures, score geographic/industry/sanctions risk, and chase missing policy fields — causing slow onboarding queues, inconsistent scoring, and repetitive follow-up email drafting.",
+    "solution_summary": "An agentic KYC pre-screening platform where analysts upload PDF/TXT/DOCX documents, Azure OpenAI extracts and validates structured KYC data against a configurable policy, computes AI risk scores with explainable reasoning, visualizes ownership graphs, generates DOCX reports, manages a prioritized client queue, and indexes documents with GraphRAG for per-project Q&A.",
+    "tech_stack": [
+      "React 19",
+      "TypeScript",
+      "Vite",
+      "Tailwind CSS",
+      "Recharts",
+      "D3",
+      "FastAPI",
+      "Python",
+      "Azure OpenAI",
+      "Microsoft GraphRAG",
+      "Azure Blob Storage",
+      "Azure SQL Server",
+      "LanceDB",
+      "PyMuPDF",
+      "python-docx",
+      "SMTP"
+    ],
+    "outcomes": "Automated entity/UBO extraction from unstructured KYC documents; policy-gated ingestion blocking incomplete submissions; AI risk scores (0–100) with Low/Medium/High tiers and section-level reasoning; analyst queue prioritized by risk_score; downloadable KYC_Risk_Report DOCX; geographic FATF/sanctions exposure dashboard; LLM-drafted client follow-up emails; GraphRAG document Q&A per project."
+  },
+  "agents": [
+    {
+      "name": "Entity Extraction Agent",
+      "version": "1.0",
+      "category": "Document & Data",
+      "function_summary": "Extracts entities, ownership relationships, and UBO registry records from uploaded corporate KYC documents into structured JSON for SQL persistence.",
+      "inputs": [
+        "PDF/TXT/DOCX document text",
+        "filename",
+        "source_document_id"
+      ],
+      "outputs": [
+        "entities array (entity_name, entity_type, jurisdiction, incorporation_date, registered_address)",
+        "ownership_relationships array (parent_entity_id, child_entity_id, ownership_percentage, control_type)",
+        "ubo_registry array (full_name, nationality, ownership_percentage, passport_number, linked_entities)"
+      ],
+      "model_used": "Azure OpenAI gpt-5.1 (GPT4_LLM_MODEL_DEPLOYMENT_NAME)",
+      "tech_stack": ["Azure OpenAI", "PyMuPDF", "python-docx", "FastAPI"],
+      "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Uses JSON response_format; generates deterministic ENT/REL/UBO IDs via SHA1 when source IDs absent."
+    },
+    {
+      "name": "KYC Policy Completeness Validator",
+      "version": "2026-03",
+      "category": "Quality & Compliance",
+      "function_summary": "Validates extracted KYC data against kyc_ingestion_policy.json required fields and blocks risk analysis when mandatory pre-KYC information is missing.",
+      "inputs": [
+        "extracted JSON from entity extraction",
+        "source document text",
+        "KYC ingestion policy JSON (25+ required fields)"
+      ],
+      "outputs": [
+        "is_blocking boolean",
+        "missing_items list",
+        "reason string",
+        "extracted_policy_fields dict"
+      ],
+      "model_used": "Azure OpenAI gpt-5.1",
+      "tech_stack": ["Azure OpenAI", "JSON policy engine"],
+      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Deterministic post-validation enforces policy required_if and must_be_declared rules (e.g., offshore_exposure_declaration)."
+    },
+    {
+      "name": "Missing Information Email Drafter",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Drafts professional client-facing emails requesting missing KYC details with structured bullet lists and Compliance Team sign-off.",
+      "inputs": [
+        "client_name",
+        "source_doc",
+        "missing_items",
+        "reason",
+        "missing_item_explanations"
+      ],
+      "outputs": [
+        "subject string",
+        "body string (HTML-free plain text email)"
+      ],
+      "model_used": "Azure OpenAI gpt-5.1",
+      "tech_stack": ["Azure OpenAI", "SMTP"],
+      "integrations": ["Azure OpenAI", "SMTP email"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Human-in-the-loop: analyst reviews/edits draft before send via POST /risk-assessment/request-more-info/send."
+    },
+    {
+      "name": "Main Entity Inference Agent",
+      "version": "1.0",
+      "category": "Document & Data",
+      "function_summary": "Infers the primary corporate entity described in a project's latest document to center the radial ownership visualization.",
+      "inputs": [
+        "document bytes",
+        "filename",
+        "candidate entity names from SQL"
+      ],
+      "outputs": [
+        "entity_id",
+        "entity_name",
+        "reason"
+      ],
+      "model_used": "Azure OpenAI gpt-5.1",
+      "tech_stack": ["Azure OpenAI", "FastAPI"],
+      "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Exposed via GET /graph/main-entity; fuzzy-matches LLM output to SQL entity names."
+    },
+    {
+      "name": "ML Risk Classifier Stub",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Rule-based classifier that assigns Low/Medium/High risk tier from engineered geographic, industry, ownership, PEP, and sanctions features.",
+      "inputs": [
+        "primary_country",
+        "fatf_country_risk_band",
+        "industry_risk_band",
+        "ownership_layers",
+        "ownership_opacity",
+        "ubo_max_ownership_pct",
+        "pep_exposure",
+        "sanctions_hits",
+        "high_risk_geo_pct",
+        "circular_ownership"
+      ],
+      "outputs": [
+        "risk_tier (Low/Medium/High)",
+        "confidence (0.74–0.9)"
+      ],
+      "model_used": "Custom rule-based stub (ml_stub.py)",
+      "tech_stack": ["Python"],
+      "integrations": [],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Not a trained ML model; provides gentle prior for section score calibration in pipeline_full.py."
+    },
+    {
+      "name": "Risk Scoring Agent",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Aggregates geography (30), ownership (30), regulatory/sanctions (20), and industry (20) scores into a final 0–100 risk score with hard override rules for FATF blacklist, sanctions, circular ownership, and PEP exposure.",
+      "inputs": [
+        "RiskFactorScores (geography_score, ownership_score, regulatory_score, industry_score)",
+        "OverrideFlags",
+        "client_summary / project_id"
+      ],
+      "outputs": [
+        "final_score (0–100)",
+        "risk_tier (Low/Medium/High)",
+        "override_triggered",
+        "override_reason",
+        "reasoning text"
+      ],
+      "model_used": "Deterministic scoring + Azure OpenAI gpt-5.1 reasoning",
+      "tech_stack": ["Azure OpenAI", "Pydantic", "FastAPI"],
+      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Tier cutoffs: 0–33 Low, 34–66 Medium, 67–100 High; overrides force High tier."
+    },
+    {
+      "name": "Risk Reasoning Generator",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Generates explainable AI narratives for the final risk score and each of four risk dimensions (Geography, Ownership, Industry, Sanctions) for UI display and DOCX reports.",
+      "inputs": [
+        "project_id",
+        "section_scores_0_100",
+        "final_score",
+        "final_tier",
+        "engineered feature summary"
+      ],
+      "outputs": [
+        "final_reasoning (UI paragraph)",
+        "report_reasoning (geography, ownership_structure, industry_type, sanctions, final_summary)"
+      ],
+      "model_used": "Azure OpenAI gpt-5.1 (AzureOpenAIReasoningLLM)",
+      "tech_stack": ["Azure OpenAI", "asyncio"],
+      "integrations": ["Azure OpenAI"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Runs 6 parallel LLM prompts; strips parentheses/brackets from output; required for risk summary payload validity."
+    },
+    {
+      "name": "UBO Analysis Engine",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Computes UBO-specific risk score from ownership concentration, identification transparency, structural complexity, and PEP/sanctions/geo flags.",
+      "inputs": [
+        "entities from Azure SQL",
+        "ubo_registry rows",
+        "ownership_relationships"
+      ],
+      "outputs": [
+        "ubo_analysis.score_0_100",
+        "ubo_analysis.tier",
+        "ubo_analysis.summary",
+        "ubo_analysis.metrics (total_ubos, max_ownership_pct, circular_ownership, pep_count)",
+        "ubo_analysis.top_ubos"
+      ],
+      "model_used": "Deterministic Python (no LLM)",
+      "tech_stack": ["Python", "Azure SQL"],
+      "integrations": ["Azure SQL Server"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Four 0–25 components: concentration, transparency, complexity, risk_flags."
+    },
+    {
+      "name": "GraphRAG Index & Query Agent",
+      "version": "1.0",
+      "category": "Document & Data",
+      "function_summary": "Indexes per-project KYC documents into a knowledge graph with entity/community extraction and embeddings; answers analyst questions via local, global, drift, or basic search methods.",
+      "inputs": [
+        "project_id",
+        "TXT documents in projects/{id}/input/",
+        "natural language question",
+        "search method (local/global/drift/basic)"
+      ],
+      "outputs": [
+        "entities.parquet",
+        "community_reports.parquet",
+        "LanceDB embeddings",
+        "natural language answer text"
+      ],
+      "model_used": "Microsoft GraphRAG with Azure OpenAI gpt-5.2 + text-embedding-3-small",
+      "tech_stack": ["Microsoft GraphRAG", "LanceDB", "Azure OpenAI", "subprocess"],
+      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Runs as background thread after upload; exposed via POST /chat and POST /projects/{id}/index."
+    },
+    {
+      "name": "KYC Risk Report Generator",
+      "version": "1.0",
+      "category": "Quality & Compliance",
+      "function_summary": "Generates downloadable Word (.docx) KYC risk assessment reports with KPI summary table, section scores, UBO details, override status, and AI reasoning narratives.",
+      "inputs": [
+        "risk_assessment_summary.json payload",
+        "entities, ubos, relationships from Azure SQL"
+      ],
+      "outputs": [
+        "KYC_Risk_Report_{project}.docx binary"
+      ],
+      "model_used": "python-docx (no LLM at generation time)",
+      "tech_stack": ["python-docx", "FastAPI"],
+      "integrations": ["Azure Blob Storage", "Azure SQL Server"],
+      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "origin_client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "status": "available",
+      "typical_accuracy": null,
+      "notes": "Threshold bands documented in report: Low 0–30, Medium 31–55, High 56–100; served via GET /risk-assessment/report."
+    }
+  ]
+}
