@@ -7,7 +7,12 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-SpecStatus = Literal["draft", "ready"]
+SpecStatus = Literal["draft", "sufficient", "ready"]
+
+# Alias: every requirements field must be known before architecture questions.
+# Defined after REQUIREMENTS_FIELD_ORDER (see bottom of field lists).
+
+FieldSource = Literal["problem_statement", "user_answer", "inferred"]
 
 
 class FieldStatus(str, Enum):
@@ -18,24 +23,24 @@ class FieldStatus(str, Enum):
 
 
 REQUIREMENTS_FIELD_DEFINITIONS: list[tuple[str, str]] = [
-    ("use_case", "Use case"),
-    ("data_volume", "Data volume"),
-    ("accuracy_target", "Accuracy target"),
-    ("hitl_behavior", "HITL / uncertainty behaviour"),
-    ("integrations", "Required integrations"),
-    ("latency_target", "Latency target"),
-    ("model_preference", "Model preference"),
-    ("deployment_platform", "Deployment platform"),
+    ("use_case", "Main goal"),
+    ("data_volume", "How much data"),
+    ("accuracy_target", "How accurate it must be"),
+    ("hitl_behavior", "When someone should review results"),
+    ("integrations", "Where data comes from and goes"),
+    ("latency_target", "How fast answers are needed"),
+    ("model_preference", "AI preference"),
+    ("deployment_platform", "Where it should run"),
 ]
 
 ARCHITECTURE_FIELD_DEFINITIONS: list[tuple[str, str]] = [
-    ("architectural_flow", "End-to-end architectural flow"),
-    ("architectural_flow_feedback", "Architectural flow — your feedback"),
-    ("architectural_pattern", "Architectural pattern"),
-    ("core_components", "Core components / agents"),
-    ("data_flow", "Data flow between components"),
-    ("orchestration_model", "Orchestration model"),
-    ("scalability_constraints", "Scalability & concurrency"),
+    ("architectural_flow", "Order of steps in your process"),
+    ("architectural_flow_feedback", "Check the steps we understood"),
+    ("architectural_pattern", "Overall approach"),
+    ("core_components", "Main parts you need"),
+    ("data_flow", "Where information comes from and goes"),
+    ("orchestration_model", "How steps run (one-by-one or together)"),
+    ("scalability_constraints", "How many people use it at once"),
 ]
 
 # Question order within each group (used by interview picker).
@@ -45,6 +50,32 @@ REQUIREMENTS_FIELD_ORDER: tuple[str, ...] = tuple(
 ARCHITECTURE_FIELD_ORDER: tuple[str, ...] = tuple(
     k for k, _ in ARCHITECTURE_FIELD_DEFINITIONS
 )
+
+# Only these are asked in the chat (non-technical users).
+USER_INTERVIEW_REQUIREMENT_KEYS: tuple[str, ...] = (
+    "hitl_behavior",
+    "integrations",
+)
+INFERRED_REQUIREMENT_KEYS: tuple[str, ...] = tuple(
+    k for k, _ in REQUIREMENTS_FIELD_DEFINITIONS
+    if k not in USER_INTERVIEW_REQUIREMENT_KEYS
+)
+
+USER_INTERVIEW_ARCHITECTURE_KEYS: tuple[str, ...] = (
+    "architectural_flow",
+    "core_components",
+)
+INFERRED_ARCHITECTURE_KEYS: tuple[str, ...] = tuple(
+    k for k, _ in ARCHITECTURE_FIELD_DEFINITIONS
+    if k not in USER_INTERVIEW_ARCHITECTURE_KEYS
+)
+
+USER_INTERVIEW_FIELD_KEYS: tuple[str, ...] = (
+    USER_INTERVIEW_REQUIREMENT_KEYS + USER_INTERVIEW_ARCHITECTURE_KEYS
+)
+
+CORE_REQUIREMENTS_BEFORE_ARCHITECTURE: tuple[str, ...] = USER_INTERVIEW_REQUIREMENT_KEYS
+SUFFICIENT_REQUIREMENT_KEYS: tuple[str, ...] = USER_INTERVIEW_REQUIREMENT_KEYS
 
 SPEC_FIELD_DEFINITIONS: list[tuple[str, str]] = (
     REQUIREMENTS_FIELD_DEFINITIONS + ARCHITECTURE_FIELD_DEFINITIONS
@@ -58,6 +89,46 @@ FIELD_GROUPS: dict[str, list[str]] = {
 }
 
 
+class CatalogHint(BaseModel):
+    """Similar agent from Phase 1 catalog (grounded in data/spec.json)."""
+
+    agent_id: str
+    name: str
+    category: str = ""
+    origin_client: str = ""
+    function_summary: str = ""
+    score: float = 0.0
+    origin_project: str = ""
+    integrations: str = ""
+    model_used: str = ""
+    status: str = "available"
+
+
+class GraphNode(BaseModel):
+    """Draft node for Phase 3 canvas."""
+
+    id: str
+    label: str
+    type: Literal["agent", "custom", "gateway", "human"] = "custom"
+    agent_id: Optional[str] = None
+    description: Optional[str] = None
+
+
+class GraphEdge(BaseModel):
+    """Draft edge for Phase 3 canvas."""
+
+    from_id: str
+    to_id: str
+    label: Optional[str] = None
+
+
+class GraphDraft(BaseModel):
+    """Structured graph emitted with the architecture blueprint."""
+
+    nodes: list[GraphNode] = Field(default_factory=list)
+    edges: list[GraphEdge] = Field(default_factory=list)
+
+
 class SpecField(BaseModel):
     """One slot in the architecture specification form."""
 
@@ -66,6 +137,8 @@ class SpecField(BaseModel):
     value: Optional[str] = None
     status: FieldStatus = FieldStatus.PENDING
     notes: Optional[str] = None
+    source: Optional[FieldSource] = None
+    confidence: Optional[float] = None
 
     @property
     def is_known(self) -> bool:
@@ -82,7 +155,10 @@ class ArchitectureSpec(BaseModel):
     status: SpecStatus = "draft"
     problem_statement: str = ""
     fields: dict[str, SpecField] = Field(default_factory=dict)
+    transcript_summary: str = ""
+    catalog_hints: list[CatalogHint] = Field(default_factory=list)
     architecture_blueprint: Optional[str] = None
+    graph_draft: Optional[GraphDraft] = None
 
     @classmethod
     def empty(cls, problem_statement: str = "") -> ArchitectureSpec:
@@ -111,6 +187,28 @@ class ArchitectureSpec(BaseModel):
             if key in self.fields and not self.fields[key].is_known
         ]
 
+    def pending_core_requirements_keys(self) -> list[str]:
+        """User-facing requirements that must be answered before architecture questions."""
+        return [
+            key
+            for key in CORE_REQUIREMENTS_BEFORE_ARCHITECTURE
+            if key in self.fields and not self.fields[key].is_known
+        ]
+
+    def pending_user_interview_keys(self) -> list[str]:
+        """Fields the chatbot may ask (excludes latency, accuracy, etc.)."""
+        return [
+            key
+            for key in USER_INTERVIEW_FIELD_KEYS
+            if key in self.fields and not self.fields[key].is_known
+        ]
+
+    def core_requirements_complete(self) -> bool:
+        return not self.pending_core_requirements_keys()
+
+    def user_interview_complete(self) -> bool:
+        return not self.pending_user_interview_keys()
+
     def known_count(self) -> int:
         return sum(1 for key in REQUIRED_FIELD_KEYS if self.fields[key].is_known)
 
@@ -118,8 +216,8 @@ class ArchitectureSpec(BaseModel):
         return len(REQUIRED_FIELD_KEYS)
 
     def recompute_status(self) -> None:
-        """Set status to ready when every required field is known."""
-        if not self.pending_field_keys():
+        """Ready when the user-facing interview is complete (no silent inference)."""
+        if self.user_interview_complete():
             self.status = "ready"
         else:
             self.status = "draft"
@@ -142,11 +240,28 @@ class ArchitectureSpec(BaseModel):
                 field.status = FieldStatus.KNOWN
             elif patch.get("status") == "pending" or patch.get("status") == FieldStatus.PENDING:
                 field.status = FieldStatus.PENDING
-            elif field.value:
-                field.status = FieldStatus.KNOWN
             if patch.get("notes"):
                 field.notes = str(patch["notes"]).strip() or None
+            if patch.get("source") in ("problem_statement", "user_answer", "inferred"):
+                field.source = patch["source"]
+            if patch.get("confidence") is not None:
+                try:
+                    field.confidence = float(patch["confidence"])
+                except (TypeError, ValueError):
+                    pass
         self.recompute_status()
+
+    def compact_known_json(self) -> dict:
+        """Known fields only — for smaller LLM prompts."""
+        return {
+            key: {
+                "value": self.fields[key].value,
+                "status": self.fields[key].status.value,
+                "source": self.fields[key].source,
+            }
+            for key in REQUIRED_FIELD_KEYS
+            if self.fields[key].is_known
+        }
 
 
 class ChatMessage(BaseModel):
@@ -157,12 +272,21 @@ class ChatMessage(BaseModel):
     field_key: Optional[str] = None
 
 
+class ClarifyingQuestionItem(BaseModel):
+    """Pre-interview question before agents or architecture are suggested."""
+
+    id: str
+    question: str
+    why_it_matters: str = ""
+
+
 class InterviewQuestion(BaseModel):
     """Assistant turn: one focused question with chip options."""
 
     field_key: str
     question: str
     chips: list[str] = Field(default_factory=list)
+    why_it_matters: Optional[str] = None
 
 
 class InterviewSession(BaseModel):
@@ -173,3 +297,11 @@ class InterviewSession(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     pending_question: Optional[InterviewQuestion] = None
     last_answered_field: Optional[str] = None
+    architecture_plan: Optional["ArchitecturePlan"] = None
+    clarifying_questions: list[ClarifyingQuestionItem] = Field(default_factory=list)
+    clarifying_answers: dict[str, str] = Field(default_factory=dict)
+
+
+from schemas.architecture_plan import ArchitecturePlan  # noqa: E402
+
+InterviewSession.model_rebuild()

@@ -7,24 +7,36 @@ Affine Agent Catalog (Phase 1) and smart requirements interview (Phase 2).
 | Directory | Phase | Description |
 |-----------|-------|-------------|
 | [agent_catalog/](agent_catalog/) | 1 & 2 | Catalog JSON ingest, Azure AI Search index, FastAPI interview API |
-| [launchpad-ui/](launchpad-ui/) | 2 | Optional React UI (requires Node.js) |
+| [agentforge-ui/](agentforge-ui/) | 2–3 | **AgentForge UI** (Dashboard, Builder, Workflows, Agent Library) |
+| [agentforge-mock-api/](agentforge-mock-api/) | — | Mock API for AgentForge screens (port 3001) |
+| [launchpad-ui/](launchpad-ui/) | 2 | Legacy minimal React UI |
 
 ## Quick start
 
-See [agent_catalog/README.md](agent_catalog/README.md) for Phase 1 (catalog index) and [agent_catalog/README_PHASE2.md](agent_catalog/README_PHASE2.md) for Phase 2 (interview UI at `/ui/`).
+**Step-by-step:** [START.md](START.md) (three terminals for AgentForge UI + mock API + AFFINE).
 
 ```bash
-cd agent_catalog
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # add your Azure keys
-python scripts/create_index.py
-python -m pipeline.run --source ./data/spec.json
-uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+# AFFINE API
+cd agent_catalog && source .venv/bin/activate
+uvicorn api.main:app --reload --host 127.0.0.1 --port 8003
+
+# Mock API (workflows, agents, dashboard)
+./scripts/start-agentforge-mock.sh
+
+# AgentForge UI
+cd agentforge-ui && npm install && npm run dev
 ```
 
-Open http://127.0.0.1:8000/ui/ for the Phase 2 interview.
+Open http://localhost:5173. Legacy UI: `launchpad-ui/`. Integration plan: [docs/INTEGRATION_AGENTIC_LAUNCHPAD.md](docs/INTEGRATION_AGENTIC_LAUNCHPAD.md).
+
+See [agent_catalog/README.md](agent_catalog/README.md) (catalog index) and [agent_catalog/README_PHASE2.md](agent_catalog/README_PHASE2.md) (interview).
 
 ## Phase 3
 
-Planned: architecture generation from completed spec + catalog search.
+Architecture planning API — see [agent_catalog/README_PHASE3.md](agent_catalog/README_PHASE3.md).
+
+```bash
+curl -X POST http://127.0.0.1:8001/api/sessions/{session_id}/architecture
+```
+
+**Canvas UI:** `cd launchpad-ui && npm run dev` → http://localhost:5173 (Architecture tab after interview).

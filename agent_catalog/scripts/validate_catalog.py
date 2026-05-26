@@ -28,7 +28,11 @@ CATEGORIES = [
 
 
 def _fetch_all_agents(settings) -> list[dict]:
-    """Retrieve every agent document from the index (unordered listing)."""
+    """
+    Retrieve every agent document from the index.
+
+    Sorting is done in Python — ``name`` is searchable but not sortable on the index.
+    """
     client = SearchClient(
         endpoint=settings.azure_search_endpoint,
         index_name=settings.azure_search_index_name,
@@ -37,7 +41,6 @@ def _fetch_all_agents(settings) -> list[dict]:
     results = client.search(
         search_text="*",
         top=1000,
-        order_by=["name asc"],
         select=[
             "id",
             "name",
@@ -49,7 +52,9 @@ def _fetch_all_agents(settings) -> list[dict]:
             "vertical",
         ],
     )
-    return [dict(r) for r in results]
+    agents = [dict(r) for r in results]
+    agents.sort(key=lambda a: (a.get("name") or "").lower())
+    return agents
 
 
 def _status_label(status: str) -> str:

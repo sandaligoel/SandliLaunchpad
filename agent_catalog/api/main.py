@@ -12,16 +12,18 @@ from fastapi.staticfiles import StaticFiles
 
 from api.routes import router
 from config import configure_logging, get_settings
+from services.data_storage import get_data_storage, get_storage_status
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 settings = get_settings()
 configure_logging(settings.log_level)
+get_data_storage()
 
 app = FastAPI(
     title="Affine Agent Launchpad",
-    description="Phase 2 smart requirements interview",
-    version="0.2.0",
+    description="Agent Launchpad — requirements interview and architecture planning",
+    version="0.3.0",
 )
 
 _origins = os.getenv(
@@ -48,7 +50,14 @@ def root() -> RedirectResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "phase": 2}
+    storage = get_storage_status()
+    ok = storage.get("backend") == "local" or storage.get("reachable") is True
+    return {
+        "status": "ok" if ok else "degraded",
+        "phase": 3,
+        "features": ["interview", "architecture_plan"],
+        "storage": storage,
+    }
 
 
 app.mount(

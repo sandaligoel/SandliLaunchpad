@@ -13,7 +13,26 @@ This catalog powers Phase 2+ of the Agent Launchpad (smart interview and archite
   - Chat deployment (e.g. GPT-4.1) → `AZURE_OPENAI_CHAT_DEPLOYMENT`
   - Embedding deployment `text-embedding-3-large` (3072 dimensions)
 - Azure AI Search service (Basic tier or higher recommended for semantic search)
-- Catalog source: `./data/spec.json` (whole file). Set `PDF_PATH` in `.env` to that path (name is historical).
+- Catalog source: `./data/spec.json` (whole file, no PDF chunking). Set `PDF_PATH` in `.env` to that path (name is historical).
+
+### `spec.json` format
+
+Multi-project catalog (current):
+
+```json
+[
+  { "project": { "name": "...", "client": "...", "vertical": "...", ... }, "agents": [ ... ] },
+  { "project": { ... }, "agents": [ ... ] }
+]
+```
+
+Legacy single-project shape is still supported:
+
+```json
+{ "project": { ... }, "agents": [ ... ] }
+```
+
+Vertical values like `Finance` or `Retail / CPG` are normalized to canonical enums (`Finance`, `Retail`, etc.). Duplicate agent names across projects get disambiguated ids (e.g. `roboflow-shelf-row-detector-affine-analytics-vto-platform`).
 
 ## Setup
 

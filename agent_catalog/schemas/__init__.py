@@ -8,13 +8,23 @@ from schemas.agent_record import (
     Vertical,
     slugify,
 )
+from schemas.architecture_spec import (
+    ArchitectureSpec,
+    CatalogHint,
+    GraphDraft,
+    InterviewSession,
+)
 from schemas.extraction_output import ExtractionOutput
 
 __all__ = [
     "AgentRecord",
     "AgentStatus",
+    "ArchitectureSpec",
+    "CatalogHint",
     "Category",
     "ExtractionOutput",
+    "GraphDraft",
+    "InterviewSession",
     "ProjectRecord",
     "Vertical",
     "slugify",

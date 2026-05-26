@@ -42,6 +42,7 @@ def call_llm(
     user_message: str,
     *,
     temperature: float = 0.1,
+    json_mode: bool = False,
 ) -> str:
     """
     Call Azure OpenAI chat completion with retry and exponential backoff.
@@ -51,14 +52,17 @@ def call_llm(
     last_error: Exception | None = None
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.chat.completions.create(
-                model=settings.azure_openai_chat_deployment,
-                messages=[
+            kwargs: dict = {
+                "model": settings.azure_openai_chat_deployment,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
                 ],
-                temperature=temperature,
-            )
+                "temperature": temperature,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            response = client.chat.completions.create(**kwargs)
             content = response.choices[0].message.content
             if not content:
                 raise ValueError("Empty response from chat completion")

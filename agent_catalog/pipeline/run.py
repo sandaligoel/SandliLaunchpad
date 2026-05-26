@@ -34,17 +34,21 @@ def _dedupe_agents(agents: list[AgentRecord]) -> list[AgentRecord]:
 
 
 def _print_summary(
+    projects: int,
     agents: int,
     indexed: int,
     index_failures: int,
-    project_name: str | None,
+    project_names: list[str],
 ) -> None:
+    preview = ", ".join(project_names[:3])
+    if len(project_names) > 3:
+        preview += f" (+{len(project_names) - 3} more)"
     lines = [
         "┌─────────────────────────────────┐",
         "│  Affine Agent Catalog — Built   │",
         "├─────────────────────────────────┤",
         f"│  Source:             JSON      │",
-        f"│  Project:            {(project_name or '—')[:10]:<10}│",
+        f"│  Projects loaded:    {projects:<10}│",
         f"│  Agents loaded:      {agents:<10}│",
         f"│  Agents indexed:     {indexed:<10}│",
         f"│  Index failures:     {index_failures:<10}│",
@@ -52,13 +56,15 @@ def _print_summary(
     ]
     for line in lines:
         logger.info(line)
+    if preview:
+        logger.info("  Projects: %s", preview)
 
 
 def run_pipeline(json_path: str) -> None:
     """
     Load the full catalog JSON, embed each agent, upload to Azure AI Search.
 
-    No chunking, no LLM extraction, no search ranking — one file in, N agents indexed.
+    No chunking, no LLM extraction — one file in, all agents indexed.
     """
     settings = get_settings()
     configure_logging(settings.log_level)
@@ -70,7 +76,7 @@ def run_pipeline(json_path: str) -> None:
     if path.suffix.lower() != ".json":
         raise typer.BadParameter(
             f"Expected a .json catalog file, got '{path.suffix}'. "
-            "Put your full spec in data/spec.json and point PDF_PATH (or --source) at it."
+            "Put your catalog in data/spec.json and point PDF_PATH (or --source) at it."
         )
 
     if not index_exists(settings):
@@ -79,21 +85,31 @@ def run_pipeline(json_path: str) -> None:
     else:
         logger.info("Search index '%s' exists", settings.azure_search_index_name)
 
-    project, agents = load_catalog_json(path)
-    unique_agents = _dedupe_agents(agents)
+    catalog = load_catalog_json(path)
+    unique_agents = _dedupe_agents(catalog.agents)
 
-    if project:
-        logger.info("Loaded project: %s", project.name)
-    logger.info("Indexing %d agents from %s (whole file, no chunks)", len(unique_agents), path.name)
+    for project in catalog.projects:
+        logger.info("  • %s (%s) — %s", project.name, project.client, project.vertical)
+
+    if catalog.errors:
+        logger.warning("%d parse warning(s) while loading catalog", len(catalog.errors))
+
+    logger.info(
+        "Indexing %d agents from %s (%d project block(s))",
+        len(unique_agents),
+        path.name,
+        len(catalog.projects),
+    )
 
     compute_embeddings(unique_agents, settings)
     index_result = index_agents(unique_agents, settings)
 
     _print_summary(
+        projects=len(catalog.projects),
         agents=len(unique_agents),
         indexed=index_result.succeeded,
         index_failures=index_result.failed,
-        project_name=project.name if project else None,
+        project_names=[p.name for p in catalog.projects],
     )
 
 

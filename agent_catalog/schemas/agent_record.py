@@ -33,6 +33,10 @@ _VERTICAL_ALIASES: dict[str, Vertical] = {
     "banking": "Finance",
     "consumer packaged goods": "CPG",
     "fmcg": "CPG",
+    "retail / cpg": "Retail",
+    "retail/cpg": "Retail",
+    "retail and cpg": "Retail",
+    "cpg / retail": "Retail",
     "health care": "Healthcare",
     "life sciences": "Healthcare",
     "industrial": "Manufacturing",
@@ -50,9 +54,14 @@ def normalize_vertical(value: str | None) -> Vertical:
     text = str(value).strip()
     if text in _VERTICAL_VALUES:
         return text  # type: ignore[return-value]
-    mapped = _VERTICAL_ALIASES.get(text.lower())
+    lowered = text.lower()
+    mapped = _VERTICAL_ALIASES.get(lowered)
     if mapped:
         return mapped
+    if "retail" in lowered and "cpg" in lowered:
+        return "Retail"
+    if "finance" in lowered or "banking" in lowered:
+        return "Finance"
     for canonical in _VERTICAL_VALUES:
         if text.lower() == canonical.lower():
             return canonical  # type: ignore[return-value]

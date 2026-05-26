@@ -113,6 +113,41 @@ def index_agents(
     return result
 
 
+def _search_agents_vector(
+    client: SearchClient,
+    query: str,
+    query_vector: list[float],
+    top_k: int,
+) -> list[dict]:
+    """Keyword + vector search without semantic ranker."""
+    vector_query = VectorizedQuery(
+        vector=query_vector,
+        k_nearest_neighbors=top_k,
+        fields="embedding",
+    )
+    results = client.search(
+        search_text=query,
+        vector_queries=[vector_query],
+        top=top_k,
+        select=[
+            "id",
+            "name",
+            "function_summary",
+            "category",
+            "status",
+            "origin_client",
+            "origin_project",
+            "version",
+        ],
+    )
+    output: list[dict] = []
+    for result in results:
+        doc = dict(result)
+        doc["score"] = result.get("@search.score", 0.0)
+        output.append(doc)
+    return output
+
+
 def search_agents(
     query: str,
     settings: Settings,
@@ -144,26 +179,32 @@ def search_agents(
         fields="embedding",
     )
 
-    results = client.search(
-        search_text=query,
-        vector_queries=[vector_query],
-        query_type=QueryType.SEMANTIC,
-        semantic_configuration_name="affine-semantic",
-        top=top_k,
-        select=[
-            "id",
-            "name",
-            "function_summary",
-            "category",
-            "status",
-            "origin_client",
-            "version",
-        ],
-    )
+    select = [
+        "id",
+        "name",
+        "function_summary",
+        "category",
+        "status",
+        "origin_client",
+        "origin_project",
+        "version",
+    ]
 
-    output: list[dict] = []
-    for result in results:
-        doc = dict(result)
-        doc["score"] = result.get("@search.score", 0.0)
-        output.append(doc)
-    return output
+    try:
+        results = client.search(
+            search_text=query,
+            vector_queries=[vector_query],
+            query_type=QueryType.SEMANTIC,
+            semantic_configuration_name="affine-semantic",
+            top=top_k,
+            select=select,
+        )
+        output: list[dict] = []
+        for result in results:
+            doc = dict(result)
+            doc["score"] = result.get("@search.score", 0.0)
+            output.append(doc)
+        return output
+    except Exception as exc:
+        logger.warning("Semantic search failed, falling back to vector+keyword: %s", exc)
+        return _search_agents_vector(client, query, query_vector, top_k)

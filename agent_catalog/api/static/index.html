@@ -121,13 +121,41 @@
       }
       .chip:hover:not(:disabled) { border-color: var(--accent); }
       .chip:disabled { opacity: 0.5; cursor: not-allowed; }
+      .chips.hidden { display: none; }
       .compose {
         display: flex;
         gap: 0.5rem;
         padding: 0.75rem 1.5rem 1.25rem;
         border-top: 1px solid var(--border);
+        align-items: flex-end;
       }
-      .compose input { flex: 1; }
+      .compose.custom-mode {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .compose input,
+      .compose textarea {
+        flex: 1;
+        width: 100%;
+        font-family: inherit;
+      }
+      .compose.custom-mode textarea {
+        min-height: 88px;
+        border-color: var(--accent);
+        resize: vertical;
+      }
+      .custom-hint {
+        margin: 0 1.5rem 0.5rem;
+        font-size: 0.82rem;
+        color: var(--accent);
+      }
+      .chip.custom { border-style: dashed; }
+      .compose-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
       .error {
         margin: 0 1.5rem;
         padding: 0.5rem 0.75rem;
@@ -253,10 +281,15 @@
           <div class="messages" id="messages" role="log"></div>
           <p id="error-session" class="error hidden"></p>
           <div id="ready-banner" class="ready-banner hidden"></div>
+          <p id="custom-hint" class="custom-hint hidden">
+            Type your answer below, then press Send to continue.
+          </p>
           <div class="chips" id="chips"></div>
           <form class="compose" id="compose-form">
-            <input type="text" id="answer-input" placeholder="Or type a custom answer…" />
-            <button type="submit" class="btn">Send</button>
+            <div id="compose-fields" style="display:flex;gap:0.5rem;flex:1;width:100%">
+              <input type="text" id="answer-input" placeholder="Or type a custom answer…" />
+              <button type="submit" class="btn" id="btn-send">Send</button>
+            </div>
           </form>
         </div>
       </section>
@@ -349,6 +382,17 @@
         document.querySelector("#compose-form button").disabled = on || !canReply();
         document.querySelectorAll(".chip").forEach((b) => (b.disabled = on || !canReply()));
       }
+
+      function isCustomDescribeChip(chip) {
+        const t = (chip || "").trim().toLowerCase();
+        if (!t) return false;
+        if (t.includes("other") && t.includes("describe")) return true;
+        if (t === "other") return true;
+        if (/^other\s*[\/\-–]/.test(t)) return true;
+        return false;
+      }
+
+      let customDescribeMode = false;
 
       function canReply() {
         return (
@@ -463,34 +507,113 @@
           banner.classList.add("hidden");
           document.getElementById("compose-form").classList.remove("hidden");
           const chips = session.pending_question?.chips || [];
-          document.getElementById("chips").innerHTML = chips
-            .map(
-              (c) =>
-                `<button type="button" class="chip" data-answer="${escapeHtml(c).replace(/"/g, "&quot;")}">${escapeHtml(c)}</button>`
-            )
-            .join("");
-          document.querySelectorAll(".chip").forEach((btn) => {
-            btn.addEventListener("click", () => handleAnswer(btn.textContent));
-          });
+          const preset = chips.filter((c) => !isCustomDescribeChip(c));
+          const customChip = chips.find(isCustomDescribeChip);
+          const chipsEl = document.getElementById("chips");
+          const hintEl = document.getElementById("custom-hint");
+          if (customDescribeMode) {
+            chipsEl.innerHTML = "";
+            chipsEl.classList.add("hidden");
+            hintEl.classList.remove("hidden");
+          } else {
+            hintEl.classList.add("hidden");
+            chipsEl.classList.remove("hidden");
+            chipsEl.innerHTML =
+              preset
+                .map(
+                  (c) =>
+                    `<button type="button" class="chip">${escapeHtml(c)}</button>`
+                )
+                .join("") +
+              (customChip
+                ? `<button type="button" class="chip custom">${escapeHtml(customChip)}</button>`
+                : "");
+            chipsEl.querySelectorAll(".chip").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                if (btn.classList.contains("custom") || isCustomDescribeChip(btn.textContent)) {
+                  enterCustomDescribeMode();
+                } else {
+                  handleAnswer(btn.textContent);
+                }
+              });
+            });
+          }
+          renderComposeInput();
         }
 
         setLoading(loading);
       }
 
+      function enterCustomDescribeMode() {
+        customDescribeMode = true;
+        renderSession();
+      }
+
+      function exitCustomDescribeMode() {
+        customDescribeMode = false;
+        const input = document.getElementById("answer-input");
+        if (input) input.value = "";
+        renderSession();
+      }
+
+      function renderComposeInput() {
+        const form = document.getElementById("compose-form");
+        const wrap = document.getElementById("compose-fields");
+        if (!wrap) return;
+        if (customDescribeMode) {
+          form.classList.add("custom-mode");
+          wrap.innerHTML = `
+            <textarea id="answer-input" rows="3" placeholder="Describe your answer in detail…" aria-label="Custom answer"></textarea>
+            <div class="compose-actions">
+              <button type="button" class="btn btn-ghost" id="btn-back-chips">Back to options</button>
+              <button type="submit" class="btn" id="btn-send">Send</button>
+            </div>`;
+          document.getElementById("btn-back-chips").addEventListener("click", exitCustomDescribeMode);
+        } else {
+          form.classList.remove("custom-mode");
+          wrap.innerHTML = `
+            <input type="text" id="answer-input" placeholder="Or type a custom answer…" />
+            <button type="submit" class="btn" id="btn-send">Send</button>`;
+        }
+        const field = document.getElementById("answer-input");
+        if (field && customDescribeMode) field.focus();
+        field?.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && customDescribeMode && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById("compose-form").requestSubmit();
+          }
+        });
+      }
+
       async function handleAnswer(answer) {
         if (!session || !canReply()) return;
+        const text = answer.trim();
+        if (isCustomDescribePlaceholder(text)) {
+          showError("error-session", "Please type your description in the box, then press Send.");
+          enterCustomDescribeMode();
+          return;
+        }
         showError("error-session", null);
         setLoading(true);
+        customDescribeMode = false;
         renderSession();
         try {
-          session = await submitTurn(session.id, answer.trim());
-          document.getElementById("answer-input").value = "";
+          session = await submitTurn(session.id, text);
         } catch (e) {
           showError("error-session", e.message);
         } finally {
           setLoading(false);
           renderSession();
         }
+      }
+
+      function isCustomDescribePlaceholder(text) {
+        const t = (text || "").trim().toLowerCase();
+        if (!t) return true;
+        if (t.length > 48) return false;
+        if (t.includes("other") && t.includes("describe")) return true;
+        if (t === "other") return true;
+        return false;
       }
 
       document.getElementById("btn-start").addEventListener("click", async () => {
@@ -513,7 +636,9 @@
 
       document.getElementById("compose-form").addEventListener("submit", (e) => {
         e.preventDefault();
-        const v = document.getElementById("answer-input").value.trim();
+        const el = document.getElementById("answer-input");
+        if (!el) return;
+        const v = el.value.trim();
         if (v) handleAnswer(v);
       });
     </script>

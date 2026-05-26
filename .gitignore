@@ -1,6 +1,12 @@
 # Secrets
 .env
 *.env.local
+agent_catalog/.env
+
+# Local / cloud-synced runtime data (use Azure Blob in deployed env)
+agent_catalog/data/sessions/
+agent_catalog/data/blob_mirror/
+agent_catalog/homebrew/
 
 # Python
 .venv/

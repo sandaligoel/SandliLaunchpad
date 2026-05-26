@@ -1,292 +1,905 @@
-{
-  "project": {
-    "name": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-    "client": "JPMorgan Chase (JPMC)",
-    "vertical": "Finance",
-    "business_problem": "The client was manually reviewing corporate KYC documents to extract entities, UBOs, and ownership structures, score geographic/industry/sanctions risk, and chase missing policy fields — causing slow onboarding queues, inconsistent scoring, and repetitive follow-up email drafting.",
-    "solution_summary": "An agentic KYC pre-screening platform where analysts upload PDF/TXT/DOCX documents, Azure OpenAI extracts and validates structured KYC data against a configurable policy, computes AI risk scores with explainable reasoning, visualizes ownership graphs, generates DOCX reports, manages a prioritized client queue, and indexes documents with GraphRAG for per-project Q&A.",
-    "tech_stack": [
-      "React 19",
-      "TypeScript",
-      "Vite",
-      "Tailwind CSS",
-      "Recharts",
-      "D3",
-      "FastAPI",
-      "Python",
-      "Azure OpenAI",
-      "Microsoft GraphRAG",
-      "Azure Blob Storage",
-      "Azure SQL Server",
-      "LanceDB",
-      "PyMuPDF",
-      "python-docx",
-      "SMTP"
-    ],
-    "outcomes": "Automated entity/UBO extraction from unstructured KYC documents; policy-gated ingestion blocking incomplete submissions; AI risk scores (0–100) with Low/Medium/High tiers and section-level reasoning; analyst queue prioritized by risk_score; downloadable KYC_Risk_Report DOCX; geographic FATF/sanctions exposure dashboard; LLM-drafted client follow-up emails; GraphRAG document Q&A per project."
+[
+  {
+    "project": {
+      "name": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+      "client": "JPMorgan Chase (JPMC)",
+      "vertical": "Finance",
+      "business_problem": "The client was manually reviewing corporate KYC documents to extract entities, UBOs, and ownership structures, score geographic/industry/sanctions risk, and chase missing policy fields — causing slow onboarding queues, inconsistent scoring, and repetitive follow-up email drafting.",
+      "solution_summary": "An agentic KYC pre-screening platform where analysts upload PDF/TXT/DOCX documents, Azure OpenAI extracts and validates structured KYC data against a configurable policy, computes AI risk scores with explainable reasoning, visualizes ownership graphs, generates DOCX reports, manages a prioritized client queue, and indexes documents with GraphRAG for per-project Q&A.",
+      "tech_stack": [
+        "React 19", "TypeScript", "Vite", "Tailwind CSS", "Recharts", "D3",
+        "FastAPI", "Python", "Azure OpenAI", "Microsoft GraphRAG",
+        "Azure Blob Storage", "Azure SQL Server", "LanceDB", "PyMuPDF", "python-docx", "SMTP"
+      ],
+      "outcomes": "Automated entity/UBO extraction from unstructured KYC documents; policy-gated ingestion blocking incomplete submissions; AI risk scores (0–100) with Low/Medium/High tiers and section-level reasoning; analyst queue prioritized by risk_score; downloadable KYC_Risk_Report DOCX; geographic FATF/sanctions exposure dashboard; LLM-drafted client follow-up emails; GraphRAG document Q&A per project."
+    },
+    "agents": [
+      {
+        "name": "Entity Extraction Agent",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Extracts entities, ownership relationships, and UBO registry records from uploaded corporate KYC documents into structured JSON for SQL persistence.",
+        "inputs": [
+          "PDF/TXT/DOCX document text",
+          "filename",
+          "source_document_id"
+        ],
+        "outputs": [
+          "entities array (entity_name, entity_type, jurisdiction, incorporation_date, registered_address)",
+          "ownership_relationships array (parent_entity_id, child_entity_id, ownership_percentage, control_type)",
+          "ubo_registry array (full_name, nationality, ownership_percentage, passport_number, linked_entities)"
+        ],
+        "model_used": "Azure OpenAI gpt-5.1 (GPT4_LLM_MODEL_DEPLOYMENT_NAME)",
+        "tech_stack": ["Azure OpenAI", "PyMuPDF", "python-docx", "FastAPI"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Uses JSON response_format; generates deterministic ENT/REL/UBO IDs via SHA1 when source IDs absent."
+      },
+      {
+        "name": "KYC Policy Completeness Validator",
+        "version": "2026-03",
+        "category": "Quality & Compliance",
+        "function_summary": "Validates extracted KYC data against kyc_ingestion_policy.json required fields and blocks risk analysis when mandatory pre-KYC information is missing.",
+        "inputs": [
+          "extracted JSON from entity extraction",
+          "source document text",
+          "KYC ingestion policy JSON (25+ required fields)"
+        ],
+        "outputs": [
+          "is_blocking boolean",
+          "missing_items list",
+          "reason string",
+          "extracted_policy_fields dict"
+        ],
+        "model_used": "Azure OpenAI gpt-5.1",
+        "tech_stack": ["Azure OpenAI", "JSON policy engine"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Deterministic post-validation enforces policy required_if and must_be_declared rules (e.g., offshore_exposure_declaration)."
+      },
+      {
+        "name": "Missing Information Email Drafter",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Drafts professional client-facing emails requesting missing KYC details with structured bullet lists and Compliance Team sign-off.",
+        "inputs": [
+          "client_name",
+          "source_doc",
+          "missing_items",
+          "reason",
+          "missing_item_explanations"
+        ],
+        "outputs": [
+          "subject string",
+          "body string (HTML-free plain text email)"
+        ],
+        "model_used": "Azure OpenAI gpt-5.1",
+        "tech_stack": ["Azure OpenAI", "SMTP"],
+        "integrations": ["Azure OpenAI", "SMTP email"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Human-in-the-loop: analyst reviews/edits draft before send via POST /riskassessment/request-more-info/send."
+      },
+      {
+        "name": "Main Entity Inference Agent",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Infers the primary corporate entity described in a project's latest document to center the radial ownership visualization.",
+        "inputs": [
+          "document bytes",
+          "filename",
+          "candidate entity names from SQL"
+        ],
+        "outputs": [
+          "entity_id",
+          "entity_name",
+          "reason"
+        ],
+        "model_used": "Azure OpenAI gpt-5.1",
+        "tech_stack": ["Azure OpenAI", "FastAPI"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Exposed via GET /graph/main-entity; fuzzy-matches LLM output to SQL entity names."
+      },
+      {
+        "name": "ML Risk Classifier Stub",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Rule-based classifier that assigns Low/Medium/High risk tier from engineered geographic, industry, ownership, PEP, and sanctions features.",
+        "inputs": [
+          "primary_country",
+          "fatf_country_risk_band",
+          "industry_risk_band",
+          "ownership_layers",
+          "ownership_opacity",
+          "ubo_max_ownership_pct",
+          "pep_exposure",
+          "sanctions_hits",
+          "high_risk_geo_pct",
+          "circular_ownership"
+        ],
+        "outputs": [
+          "risk_tier (Low/Medium/High)",
+          "confidence (0.74–0.9)"
+        ],
+        "model_used": "Custom rule-based stub (ml_stub.py)",
+        "tech_stack": ["Python"],
+        "integrations": [],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Not a trained ML model; provides gentle prior for section score calibration in pipeline_full.py."
+      },
+      {
+        "name": "Risk Scoring Agent",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Aggregates geography (30), ownership (30), regulatory/sanctions (20), and industry (20) scores into a final 0–100 risk score with hard override rules for FATF blacklist, sanctions, circular ownership, and PEP exposure.",
+        "inputs": [
+          "RiskFactorScores (geography_score, ownership_score, regulatory_score, industry_score)",
+          "OverrideFlags",
+          "client_summary / project_id"
+        ],
+        "outputs": [
+          "final_score (0–100)",
+          "risk_tier (Low/Medium/High)",
+          "override_triggered",
+          "override_reason",
+          "reasoning text"
+        ],
+        "model_used": "Deterministic scoring + Azure OpenAI gpt-5.1 reasoning",
+        "tech_stack": ["Azure OpenAI", "Pydantic", "FastAPI"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Tier cutoffs: 0–33 Low, 34–66 Medium, 67–100 High; overrides force High tier."
+      },
+      {
+        "name": "Risk Reasoning Generator",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Generates explainable AI narratives for the final risk score and each of four risk dimensions (Geography, Ownership, Industry, Sanctions) for UI display and DOCX reports.",
+        "inputs": [
+          "project_id",
+          "section_scores_0_100",
+          "final_score",
+          "final_tier",
+          "engineered feature summary"
+        ],
+        "outputs": [
+          "final_reasoning (UI paragraph)",
+          "report_reasoning (geography, ownership_structure, industry_type, sanctions, final_summary)"
+        ],
+        "model_used": "Azure OpenAI gpt-5.1 (AzureOpenAIReasoningLLM)",
+        "tech_stack": ["Azure OpenAI", "asyncio"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Runs 6 parallel LLM prompts; strips parentheses/brackets from output; required for risk summary payload validity."
+      },
+      {
+        "name": "UBO Analysis Engine",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Computes UBO-specific risk score from ownership concentration, identification transparency, structural complexity, and PEP/sanctions/geo flags.",
+        "inputs": [
+          "entities from Azure SQL",
+          "ubo_registry rows",
+          "ownership_relationships"
+        ],
+        "outputs": [
+          "ubo_analysis.score_0_100",
+          "ubo_analysis.tier",
+          "ubo_analysis.summary",
+          "ubo_analysis.metrics (total_ubos, max_ownership_pct, circular_ownership, pep_count)",
+          "ubo_analysis.top_ubos"
+        ],
+        "model_used": "Deterministic Python (no LLM)",
+        "tech_stack": ["Python", "Azure SQL"],
+        "integrations": ["Azure SQL Server"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Four 0–25 components: concentration, transparency, complexity, risk_flags."
+      },
+      {
+        "name": "GraphRAG Index & Query Agent",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Indexes per-project KYC documents into a knowledge graph with entity/community extraction and embeddings; answers analyst questions via local, global, drift, or basic search methods.",
+        "inputs": [
+          "project_id",
+          "TXT documents in projects/{id}/input/",
+          "natural language question",
+          "search method (local/global/drift/basic)"
+        ],
+        "outputs": [
+          "entities.parquet",
+          "community_reports.parquet",
+          "LanceDB embeddings",
+          "natural language answer text"
+        ],
+        "model_used": "Microsoft GraphRAG with Azure OpenAI gpt-5.2 + text-embedding-3-small",
+        "tech_stack": ["Microsoft GraphRAG", "LanceDB", "Azure OpenAI", "subprocess"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Runs as background thread after upload; exposed via POST /chat and POST /projects/{id}/index."
+      },
+      {
+        "name": "KYC Risk Report Generator",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Generates downloadable Word (.docx) KYC risk assessment reports with KPI summary table, section scores, UBO details, override status, and AI reasoning narratives.",
+        "inputs": [
+          "risk_assessment_summary.json payload",
+          "entities, ubos, relationships from Azure SQL"
+        ],
+        "outputs": [
+          "KYC_Risk_Report_{project}.docx binary"
+        ],
+        "model_used": "python-docx (no LLM at generation time)",
+        "tech_stack": ["python-docx", "FastAPI"],
+        "integrations": ["Azure Blob Storage", "Azure SQL Server"],
+        "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
+        "origin_client": "JPMorgan Chase (JPMC)",
+        "vertical": "Finance",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Threshold bands documented in report: Low 0–30, Medium 31–55, High 56–100; served via GET /risk-assessment/report."
+      }
+    ]
   },
-  "agents": [
-    {
-      "name": "Entity Extraction Agent",
-      "version": "1.0",
-      "category": "Document & Data",
-      "function_summary": "Extracts entities, ownership relationships, and UBO registry records from uploaded corporate KYC documents into structured JSON for SQL persistence.",
-      "inputs": [
-        "PDF/TXT/DOCX document text",
-        "filename",
-        "source_document_id"
+  {
+    "project": {
+      "name": "Affine Analytics VTO Platform",
+      "client": "Affine Analytics",
+      "vertical": "Retail / CPG",
+      "business_problem": "Retail teams were manually compositing customer photos with multiple garment and accessory images, which was slow, inconsistent for layered looks, and did not scale with a centralized product catalog or repeatable session history.",
+      "solution_summary": "A React operations UI and FastAPI backend that run a multi-stage virtual try-on pipeline: validate images, use Azure OpenAI GPT-4o vision to author a placement prompt, synthesize the composite with Google Gemini image generation, persist successful sessions to disk, and optionally manage an Azure Blob accessory catalog with Azure AI Vision + Azure AI Search semantic retrieval.",
+      "tech_stack": [
+        "React 18", "TypeScript", "Vite 5", "Tailwind CSS", "Recharts",
+        "FastAPI", "Python 3.11", "Azure OpenAI GPT-4o", "Google Gemini",
+        "Azure Blob Storage", "Azure AI Vision", "Azure AI Search", "Pillow"
       ],
-      "outputs": [
-        "entities array (entity_name, entity_type, jurisdiction, incorporation_date, registered_address)",
-        "ownership_relationships array (parent_entity_id, child_entity_id, ownership_percentage, control_type)",
-        "ubo_registry array (full_name, nationality, ownership_percentage, passport_number, linked_entities)"
-      ],
-      "model_used": "Azure OpenAI gpt-5.1 (GPT4_LLM_MODEL_DEPLOYMENT_NAME)",
-      "tech_stack": ["Azure OpenAI", "PyMuPDF", "python-docx", "FastAPI"],
-      "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Uses JSON response_format; generates deterministic ENT/REL/UBO IDs via SHA1 when source IDs absent."
+      "outcomes": "Single-click photorealistic multi-accessory try-on from person + up to 8 product images; persisted session history with prompts and assets; catalog browse/upload with optional natural-language semantic search; operational views for adoption and pipeline health (analytics/pipeline pages currently demo/mock data)."
     },
-    {
-      "name": "KYC Policy Completeness Validator",
-      "version": "2026-03",
-      "category": "Quality & Compliance",
-      "function_summary": "Validates extracted KYC data against kyc_ingestion_policy.json required fields and blocks risk analysis when mandatory pre-KYC information is missing.",
-      "inputs": [
-        "extracted JSON from entity extraction",
-        "source document text",
-        "KYC ingestion policy JSON (25+ required fields)"
+    "agents": [
+      {
+        "name": "GPT-4o Fashion Vision Analyzer",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Analyzes person and garment reference images with a fashion/computational-photography system prompt and outputs a single precise image-editing instruction for virtual try-on, including layering, lighting, and full-frame preservation.",
+        "inputs": [
+          "person_image (JPEG bytes)",
+          "garment_images (1-8 JPEG bytes)",
+          "demographic (optional form field)",
+          "category (optional form field)",
+          "style_tags (optional comma-separated form field)"
+        ],
+        "outputs": [
+          "generated_prompt (string)",
+          "duration_ms",
+          "tokens_used"
+        ],
+        "model_used": "Azure OpenAI GPT-4o (AZURE_OPENAI_DEPLOYMENT)",
+        "tech_stack": ["Azure OpenAI", "openai Python SDK", "FastAPI", "base64 vision messages"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Affine Analytics VTO Platform",
+        "origin_client": "Affine Analytics",
+        "vertical": "Retail / CPG",
+        "status": "live",
+        "typical_accuracy": null,
+        "notes": "Stage gpt_analysis in pipeline; temperature 0.2; UI may label model as GPT 5.4."
+      },
+      {
+        "name": "Gemini Image Compositor",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Synthesizes the final virtual try-on image from person photo, accessory references, and the GPT-generated editing prompt using Gemini image output modality with aspect ratio matching and up to three retries.",
+        "inputs": [
+          "person_image (JPEG bytes)",
+          "garment_images (JPEG bytes list)",
+          "editing_prompt (string from GPT analyzer)"
+        ],
+        "outputs": [
+          "output_image_bytes",
+          "mime_type",
+          "duration_ms"
+        ],
+        "model_used": "Google Gemini (GEMINI_MODEL, e.g. gemini-3-pro-image-preview or gemini-2.0-flash-exp)",
+        "tech_stack": ["google-genai", "FastAPI", "Pillow aspect ratio helper"],
+        "integrations": ["Google AI Studio / Gemini API"],
+        "origin_project": "Affine Analytics VTO Platform",
+        "origin_client": "Affine Analytics",
+        "vertical": "Retail / CPG",
+        "status": "live",
+        "typical_accuracy": null,
+        "notes": "Stage gemini_composition; requires IMAGE response_modalities support on API tier."
+      },
+      {
+        "name": "Azure AI Vision Catalog Embedder",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Generates 1024-dimensional multimodal embeddings for catalog accessory images and natural-language search queries to power semantic garment discovery.",
+        "inputs": [
+          "image_bytes (catalog upload or index job)",
+          "text query string (semantic search)"
+        ],
+        "outputs": [
+          "embedding vector (list[float], 1024 dims)"
+        ],
+        "model_used": "Azure AI Vision retrieval APIs (vectorizeImage / vectorizeText, model-version 2023-04-15)",
+        "tech_stack": ["Azure AI Vision", "httpx"],
+        "integrations": ["Azure AI Vision"],
+        "origin_project": "Affine Analytics VTO Platform",
+        "origin_client": "Affine Analytics",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Optional; enabled when AZURE_VISION_ENDPOINT and AZURE_VISION_KEY are set."
+      },
+      {
+        "name": "Azure AI Search Catalog Vector Retrieval",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Maintains and queries the vto-accessories HNSW vector index for cosine-similarity ranking of catalog items from text or image-derived embeddings.",
+        "inputs": [
+          "query embedding vector",
+          "top (1-48)"
+        ],
+        "outputs": [
+          "ranked catalog documents (id, blob_name, name, category, tags)",
+          "search score"
+        ],
+        "model_used": "Azure AI Search HNSW (cosine, 1024-d embedding field)",
+        "tech_stack": ["azure-search-documents", "Azure AI Search"],
+        "integrations": ["Azure AI Search", "Azure Blob Storage (SAS URL enrichment for hits)"],
+        "origin_project": "Affine Analytics VTO Platform",
+        "origin_client": "Affine Analytics",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Index auto-ensured on startup; optional alongside Vision embedder; endpoint GET /api/v1/catalog/search."
+      }
+    ]
+  },
+  {
+    "project": {
+      "name": "Aira (CreAItive Studio)",
+      "client": "Staples",
+      "vertical": "Retail / CPG",
+      "business_problem": "The client was manually creating Amazon PDP image sets and product videos from reference photos, product specification PDFs, and marketplace guardrails—reading long documents, writing per-slot creative briefs, running separate image tools, and reworking assets that failed marketplace compliance.",
+      "solution_summary": "Aira is a Staples-oriented Amazon PDP creative studio: users upload references and PDFs, generate up to six role-specific images in parallel via Gemini or Azure GPT Image with optional gpt-5.4 prompt authoring, score outputs against guardrails with Gemini vision compliance, and produce Sora-2 product videos from Azure-authored scripts—with optional Azure Blob persistence for projects and sessions.",
+      "tech_stack": [
+        "React 18 + TypeScript + Vite", "Tailwind CSS", "FastAPI + Uvicorn",
+        "Google Gemini (google-genai)", "Azure OpenAI (gpt-5.4, gpt-image-1.5, sora-2)",
+        "Azure Blob Storage", "PyMuPDF", "Pillow"
       ],
-      "outputs": [
-        "is_blocking boolean",
-        "missing_items list",
-        "reason string",
-        "extracted_policy_fields dict"
-      ],
-      "model_used": "Azure OpenAI gpt-5.1",
-      "tech_stack": ["Azure OpenAI", "JSON policy engine"],
-      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Deterministic post-validation enforces policy required_if and must_be_declared rules (e.g., offshore_exposure_declaration)."
+      "outcomes": "Faster PDP variant production grounded in PDF spec/guardrail text, parallel multi-slot generation, quantified compliance scores (0–100) with pass/fail rule lists, and scripted Sora video output—reducing manual prompt writing and compliance rework."
     },
-    {
-      "name": "Missing Information Email Drafter",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Drafts professional client-facing emails requesting missing KYC details with structured bullet lists and Compliance Team sign-off.",
-      "inputs": [
-        "client_name",
-        "source_doc",
-        "missing_items",
-        "reason",
-        "missing_item_explanations"
+    "agents": [
+      {
+        "name": "Generation Prompt Author",
+        "version": "2.1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Azure vision+text agent that writes per-PDP-image-type multimodal prompts (or per-role directives) from reference photos and PDF excerpts before image generation.",
+        "inputs": [
+          "Reference product images (up to 4)",
+          "image_types[]",
+          "User prompt text",
+          "Product spec PDF excerpt",
+          "Guardrails PDF excerpt"
+        ],
+        "outputs": [
+          "JSON prompts per image type",
+          "Optional role_directives map for template fallback"
+        ],
+        "model_used": "Azure OpenAI gpt-5.4 (AZURE_OPENAI_PROMPT_DEPLOYMENT)",
+        "tech_stack": ["Azure OpenAI Chat Completions", "FastAPI", "JSON schema prompting"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Controlled by GEMINI_PROMPT_AUTHOR env (legacy name). Falls back to PromptGenerator templates if Azure call fails."
+      },
+      {
+        "name": "PDP Image Generator (Gemini)",
+        "version": "2.1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Generates Amazon-style PDP PNGs from reference images plus authored prompts, one variant per parallel task.",
+        "inputs": [
+          "Reference images",
+          "Per-variant prompt string",
+          "provider_id gemini-flash"
+        ],
+        "outputs": [
+          "PNG image bytes per variant",
+          "base64 images in API response"
+        ],
+        "model_used": "Google Gemini (default gemini-2.5-flash-image)",
+        "tech_stack": ["google-genai", "FastAPI", "Pillow normalization"],
+        "integrations": ["Google Gemini API"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Default provider; supports model override via multipart model field."
+      },
+      {
+        "name": "PDP Image Generator (Azure GPT Image)",
+        "version": "2.1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Azure images/edits endpoint generates PDP variants from first reference image and per-slot prompt.",
+        "inputs": [
+          "Reference image PNG",
+          "Per-variant prompt",
+          "provider_id gpt-image"
+        ],
+        "outputs": [
+          "PNG per variant via Azure base64 response"
+        ],
+        "model_used": "Azure OpenAI gpt-image-1.5 (AZURE_OPENAI_IMAGE_MODEL)",
+        "tech_stack": ["Azure OpenAI images/edits", "requests multipart", "FastAPI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Speed mode fast|quality via AZURE_OPENAI_IMAGE_SPEED_MODE."
+      },
+      {
+        "name": "PDP Compliance Checker",
+        "version": "2.1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Vision LLM scores a generated PDP image against guardrails-only excerpts and returns pass/fail rules, warnings, suggestions, and compliance_score 0-100.",
+        "inputs": [
+          "Generated image file",
+          "image_type",
+          "Guardrails PDF text (type-focused excerpt)",
+          "Optional supplementary policy notes"
+        ],
+        "outputs": [
+          "compliance_score",
+          "passed_rules",
+          "failed_rules",
+          "warnings",
+          "suggestions"
+        ],
+        "model_used": "Google Gemini (GEMINI_COMPLIANCE_MODEL, default gemini-2.5-flash)",
+        "tech_stack": ["google-genai", "ComplianceRulesEngine", "FastAPI"],
+        "integrations": ["Google Gemini API"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Product spec PDF required on upload but explicitly excluded from compliance model context."
+      },
+      {
+        "name": "Amazon PDP Video Prompt Author",
+        "version": "2.1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Produces a full Amazon PDP video ad script (reference block, compliance checklist, scenes, generation prompts) from product spec, guardrails, optional user script, and reference image.",
+        "inputs": [
+          "Product spec PDF text",
+          "Guardrails PDF text",
+          "Reference image",
+          "User script_or_prompt",
+          "width x height x seconds"
+        ],
+        "outputs": [
+          "Long video generation prompt string (Sora-clamped)"
+        ],
+        "model_used": "Azure OpenAI gpt-5.4",
+        "tech_stack": ["Azure OpenAI", "In-repo Amazon PDP video master template"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Human approves prompt in Editor before Sora render; can skip LLM if approved_prompt supplied."
+      },
+      {
+        "name": "Sora Image-to-Video Generator",
+        "version": "2.1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Submits image-to-video jobs to Azure Sora, polls until complete, returns MP4 for PDP video ads.",
+        "inputs": [
+          "Approved prompt (max 15000 UTF-8 bytes)",
+          "Reference image",
+          "1280x720 or 720x1280",
+          "4, 8, or 12 seconds"
+        ],
+        "outputs": [
+          "video/mp4 base64",
+          "prompt_used",
+          "meta"
+        ],
+        "model_used": "Azure OpenAI Sora-2 (AZURE_OPENAI_VIDEO_DEPLOYMENT)",
+        "tech_stack": ["Azure OpenAI Videos API", "Pillow image prep", "FastAPI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Aira (CreAItive Studio)",
+        "origin_client": "Staples",
+        "vertical": "Retail / CPG",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Requires AZURE_OPENAI_ENDPOINT, API key, and video deployment configured."
+      }
+    ]
+  },
+  {
+    "project": {
+      "name": "Merchandising Vision Agent",
+      "client": "Affine Analytics",
+      "vertical": "CPG / Retail",
+      "business_problem": "The client was manually auditing retail shelf and planogram photos—counting brand facings, reading shelf-rail prices, and identifying out-of-stock gaps—which was slow and did not scale across large image libraries stored in Azure Blob.",
+      "solution_summary": "An agentic shelf-vision system that runs Roboflow row and product detection on upload, caches artifacts to Azure Blob, indexes images for semantic search, and answers natural-language merchandising questions via parallel Azure OpenAI row analyzers consolidated into a final answer—with Streamlit UI and FastAPI endpoints.",
+      "tech_stack": [
+        "Python", "Streamlit", "FastAPI", "Uvicorn", "Azure Blob Storage",
+        "Azure AI Search", "Azure AI Vision", "Azure OpenAI (gpt-5.2)",
+        "Roboflow", "OpenCV", "Pillow", "aiohttp"
       ],
-      "outputs": [
-        "subject string",
-        "body string (HTML-free plain text email)"
-      ],
-      "model_used": "Azure OpenAI gpt-5.1",
-      "tech_stack": ["Azure OpenAI", "SMTP"],
-      "integrations": ["Azure OpenAI", "SMTP email"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Human-in-the-loop: analyst reviews/edits draft before send via POST /risk-assessment/request-more-info/send."
+      "outcomes": "Automated shelf row segmentation, per-row product detection, semantic image discovery with GPT-filtered relevance, and NL Q&A for counts, pricing (e.g. Twix $1.45 / 99¢), and stock-out detection (e.g. Mars bars, Wispa tray empty) with reasoning and latency metrics."
     },
-    {
-      "name": "Main Entity Inference Agent",
-      "version": "1.0",
-      "category": "Document & Data",
-      "function_summary": "Infers the primary corporate entity described in a project's latest document to center the radial ownership visualization.",
-      "inputs": [
-        "document bytes",
-        "filename",
-        "candidate entity names from SQL"
+    "agents": [
+      {
+        "name": "Semantic Image Search & Validator",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Embeds text queries with Azure AI Vision, retrieves similar shelf images from Azure AI Search, and filters results with GPT vision relevance scoring.",
+        "inputs": ["Natural-language search query", "Azure Blob image corpus"],
+        "outputs": ["validated_results with blob_name, sas_url, gpt_reason, @search.score"],
+        "model_used": "Azure AI Vision (vectorizeText) + Azure AI Search HNSW + Azure OpenAI gpt-5.2",
+        "tech_stack": ["semantic.py", "Azure AI Search", "Azure AI Vision", "Azure OpenAI"],
+        "integrations": ["Azure Blob Storage", "Azure AI Search", "Azure AI Vision", "Azure OpenAI"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "top_k=10 retrieval; GPT validation parallelized; on error includes image by default"
+      },
+      {
+        "name": "Roboflow Shelf Row Detector",
+        "version": "4",
+        "category": "Sales & Revenue",
+        "function_summary": "Detects shelf rows as polygons, produces masked row crops and a polygon-overlay summary image.",
+        "inputs": ["Full shelf/planogram image"],
+        "outputs": ["row_N.png crops", "shelf_summary.jpg"],
+        "model_used": "Roboflow planogram1/my-first-project-z5ns2 v4",
+        "tech_stack": ["detect_crop.py", "Roboflow SDK", "OpenCV"],
+        "integrations": ["Roboflow API"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "ROW_CONFIDENCE=40; rail_margin_ratio=0.22 for price-tag area"
+      },
+      {
+        "name": "Roboflow Product Detector",
+        "version": "3",
+        "category": "Sales & Revenue",
+        "function_summary": "Runs YOLO product detection on each shelf row crop and writes annotated images with per-class counts.",
+        "inputs": ["Cropped row images"],
+        "outputs": ["Annotated row_N.png", "row_counts per class in metadata.json"],
+        "model_used": "Roboflow planogram1/third-project-0rcul v3",
+        "tech_stack": ["detect_crop.py", "Roboflow SDK", "OpenCV"],
+        "integrations": ["Roboflow API"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Parallel ThreadPoolExecutor up to 6 workers; class label often generic 'object'"
+      },
+      {
+        "name": "Shelf Count Agent",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Per-row brand-aware product counting from YOLO-annotated shelf images with confidence and structured visual reasoning.",
+        "inputs": ["User query", "Annotated row images (products_detected)"],
+        "outputs": ["product_count", "brand_detected", "counting_confidence", "reasoning per row"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["llm_functions.py", "Azure OpenAI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Invoked when query matches count keywords; runs in parallel with generic agent"
+      },
+      {
+        "name": "Shelf Understanding Agent",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Answers descriptive, price, promotion, and stock-out questions from cropped row images and full shelf context.",
+        "inputs": ["User query", "Cropped row images", "Optional original shelf image for price/promo queries"],
+        "outputs": ["answer and reasoning per row"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["llm_functions.py", "Azure OpenAI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Price/promo path uses is_price_or_promo_query() and full image plus all row crops"
+      },
+      {
+        "name": "Final Answer Consolidation Agent",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Consolidates count and generic row-level analyses into a single natural-language answer based on task_type routing.",
+        "inputs": ["User query", "intermediate JSON with count_analysis and generic_analysis"],
+        "outputs": ["final_answer", "reasoning", "user_query"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["llm_functions.py", "Azure OpenAI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Text-only call; sums product_count across rows for total queries"
+      },
+      {
+        "name": "GPT Image Relevance Validator",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Strict vision-based filter that approves or rejects blob images against a user's semantic search query.",
+        "inputs": ["Image bytes", "Search query string"],
+        "outputs": ["relevant boolean", "reason sentence", "gpt_validated flag"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["main.py", "main2.py", "semantic.py"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+        "origin_project": "Merchandising Vision Agent",
+        "origin_client": "Affine Analytics",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Uses detail:low for cost/latency; max 8-10 parallel workers"
+      }
+    ]
+  },
+  {
+    "project": {
+      "name": "Mars Sales Genie (Copilot) / Unified View",
+      "client": "Mars",
+      "vertical": "CPG / Retail",
+      "business_problem": "Field and HQ teams manually reconciled shelf photos, planogram compliance, Mars sales spreadsheets, and retail policy documents across disconnected tools, causing slow KPI reporting and inconsistent answers about on-shelf execution versus policy and sales data.",
+      "solution_summary": "Unified retail copilot and dashboard: React field-executive UI plus FastAPI backend that uploads shelf images to Azure Blob, runs Roboflow/YOLO and Azure OpenAI vision, persists KPIs to Azure SQL, indexes content in Azure AI Search, and answers questions via AutoGen-orchestrated Quin (SQL) and Eryl (semantic RAG) agents with optional vision enrichment and compliance/competitive scoring.",
+      "tech_stack": [
+        "React 19", "TypeScript", "Vite 8", "Tailwind CSS v4", "FastAPI", "Uvicorn",
+        "Azure OpenAI gpt-5.2", "Microsoft AutoGen", "Azure Blob Storage",
+        "Azure AI Search", "Azure AI Vision", "Azure SQL Server",
+        "Roboflow YOLO", "CatBoost", "SQLAlchemy", "pyodbc", "Recharts"
       ],
-      "outputs": [
-        "entity_id",
-        "entity_name",
-        "reason"
-      ],
-      "model_used": "Azure OpenAI gpt-5.1",
-      "tech_stack": ["Azure OpenAI", "FastAPI"],
-      "integrations": ["Azure OpenAI", "Azure Blob Storage", "Azure SQL Server"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Exposed via GET /graph/main-entity; fuzzy-matches LLM output to SQL entity names."
+      "outcomes": "Single interface for shelf vision KPIs, policy-aware Q&A, sales SQL analytics, route prioritization by OOS/compliance risk, planogram semantic search, and promo/order simulation—reducing manual audit reconciliation time and standardizing Mars field execution insights."
     },
-    {
-      "name": "ML Risk Classifier Stub",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Rule-based classifier that assigns Low/Medium/High risk tier from engineered geographic, industry, ownership, PEP, and sanctions features.",
-      "inputs": [
-        "primary_country",
-        "fatf_country_risk_band",
-        "industry_risk_band",
-        "ownership_layers",
-        "ownership_opacity",
-        "ubo_max_ownership_pct",
-        "pep_exposure",
-        "sanctions_hits",
-        "high_risk_geo_pct",
-        "circular_ownership"
-      ],
-      "outputs": [
-        "risk_tier (Low/Medium/High)",
-        "confidence (0.74–0.9)"
-      ],
-      "model_used": "Custom rule-based stub (ml_stub.py)",
-      "tech_stack": ["Python"],
-      "integrations": [],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Not a trained ML model; provides gentle prior for section score calibration in pipeline_full.py."
-    },
-    {
-      "name": "Risk Scoring Agent",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Aggregates geography (30), ownership (30), regulatory/sanctions (20), and industry (20) scores into a final 0–100 risk score with hard override rules for FATF blacklist, sanctions, circular ownership, and PEP exposure.",
-      "inputs": [
-        "RiskFactorScores (geography_score, ownership_score, regulatory_score, industry_score)",
-        "OverrideFlags",
-        "client_summary / project_id"
-      ],
-      "outputs": [
-        "final_score (0–100)",
-        "risk_tier (Low/Medium/High)",
-        "override_triggered",
-        "override_reason",
-        "reasoning text"
-      ],
-      "model_used": "Deterministic scoring + Azure OpenAI gpt-5.1 reasoning",
-      "tech_stack": ["Azure OpenAI", "Pydantic", "FastAPI"],
-      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Tier cutoffs: 0–33 Low, 34–66 Medium, 67–100 High; overrides force High tier."
-    },
-    {
-      "name": "Risk Reasoning Generator",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Generates explainable AI narratives for the final risk score and each of four risk dimensions (Geography, Ownership, Industry, Sanctions) for UI display and DOCX reports.",
-      "inputs": [
-        "project_id",
-        "section_scores_0_100",
-        "final_score",
-        "final_tier",
-        "engineered feature summary"
-      ],
-      "outputs": [
-        "final_reasoning (UI paragraph)",
-        "report_reasoning (geography, ownership_structure, industry_type, sanctions, final_summary)"
-      ],
-      "model_used": "Azure OpenAI gpt-5.1 (AzureOpenAIReasoningLLM)",
-      "tech_stack": ["Azure OpenAI", "asyncio"],
-      "integrations": ["Azure OpenAI"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Runs 6 parallel LLM prompts; strips parentheses/brackets from output; required for risk summary payload validity."
-    },
-    {
-      "name": "UBO Analysis Engine",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Computes UBO-specific risk score from ownership concentration, identification transparency, structural complexity, and PEP/sanctions/geo flags.",
-      "inputs": [
-        "entities from Azure SQL",
-        "ubo_registry rows",
-        "ownership_relationships"
-      ],
-      "outputs": [
-        "ubo_analysis.score_0_100",
-        "ubo_analysis.tier",
-        "ubo_analysis.summary",
-        "ubo_analysis.metrics (total_ubos, max_ownership_pct, circular_ownership, pep_count)",
-        "ubo_analysis.top_ubos"
-      ],
-      "model_used": "Deterministic Python (no LLM)",
-      "tech_stack": ["Python", "Azure SQL"],
-      "integrations": ["Azure SQL Server"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Four 0–25 components: concentration, transparency, complexity, risk_flags."
-    },
-    {
-      "name": "GraphRAG Index & Query Agent",
-      "version": "1.0",
-      "category": "Document & Data",
-      "function_summary": "Indexes per-project KYC documents into a knowledge graph with entity/community extraction and embeddings; answers analyst questions via local, global, drift, or basic search methods.",
-      "inputs": [
-        "project_id",
-        "TXT documents in projects/{id}/input/",
-        "natural language question",
-        "search method (local/global/drift/basic)"
-      ],
-      "outputs": [
-        "entities.parquet",
-        "community_reports.parquet",
-        "LanceDB embeddings",
-        "natural language answer text"
-      ],
-      "model_used": "Microsoft GraphRAG with Azure OpenAI gpt-5.2 + text-embedding-3-small",
-      "tech_stack": ["Microsoft GraphRAG", "LanceDB", "Azure OpenAI", "subprocess"],
-      "integrations": ["Azure OpenAI", "Azure Blob Storage"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Runs as background thread after upload; exposed via POST /chat and POST /projects/{id}/index."
-    },
-    {
-      "name": "KYC Risk Report Generator",
-      "version": "1.0",
-      "category": "Quality & Compliance",
-      "function_summary": "Generates downloadable Word (.docx) KYC risk assessment reports with KPI summary table, section scores, UBO details, override status, and AI reasoning narratives.",
-      "inputs": [
-        "risk_assessment_summary.json payload",
-        "entities, ubos, relationships from Azure SQL"
-      ],
-      "outputs": [
-        "KYC_Risk_Report_{project}.docx binary"
-      ],
-      "model_used": "python-docx (no LLM at generation time)",
-      "tech_stack": ["python-docx", "FastAPI"],
-      "integrations": ["Azure Blob Storage", "Azure SQL Server"],
-      "origin_project": "JPMC KYC Risk Pre-Screening (UBO GraphRAG)",
-      "origin_client": "JPMorgan Chase (JPMC)",
-      "vertical": "Finance",
-      "status": "available",
-      "typical_accuracy": null,
-      "notes": "Threshold bands documented in report: Low 0–30, Medium 31–55, High 56–100; served via GET /risk-assessment/report."
-    }
-  ]
-}
+    "agents": [
+      {
+        "name": "Pipeline Intent Classifier",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Classifies each user question into vision_only, vision_then_unified, or unified_only and flags multi-shelf comparisons for SQL-only routing.",
+        "inputs": ["question", "has_image"],
+        "outputs": ["mode", "run_vision_pipeline", "reason", "shelf_comparison_sql_route"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["Azure OpenAI", "Python"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Implemented in backend/unified_intent.py; runs before planogram_bridge and Unified_Mdb."
+      },
+      {
+        "name": "Quin SQL Agent Chain",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "AutoGen multi-agent chain that generates, executes, and critiques SQL Server queries on mars schema tables (Mars_Sales_Data, shelf_visit, retail_planogram_stocks, etc.) and returns structured sales/inventory insights.",
+        "inputs": ["sql_question", "SQL_Meta_Data schema", "optional vision_context block"],
+        "outputs": ["sql_query results", "SQL-based narrative answer", "analysis_type SQL-based"],
+        "model_used": "Azure OpenAI gpt-5.2 via AutoGen",
+        "tech_stack": ["AutoGen", "Azure OpenAI", "SQLAlchemy", "pyodbc", "Azure SQL"],
+        "integrations": ["Azure OpenAI", "Azure SQL Server"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Agents: routing_agent, Sql_Generator, Sql_Executor, Sql_tool, Sql_Execution_Critic, Insight_Generator in Unified_Mdb.py."
+      },
+      {
+        "name": "Eryl Semantic RAG Agent Chain",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Retrieves and answers from indexed retail policy and unstructured documents (Chocolate_Confectionery_Retail_Policy.docx, emails, guidelines) using Azure AI Search vector + semantic retrieval.",
+        "inputs": ["semantic_question", "Vector_Data routing hints"],
+        "outputs": ["retrieval-grounded answer", "Semantic-based analysis_type"],
+        "model_used": "Azure OpenAI gpt-5.2 + text-embedding-3-small",
+        "tech_stack": ["AutoGen", "Azure OpenAI", "azure-search-documents"],
+        "integrations": ["Azure OpenAI", "Azure AI Search index mars-demo"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Agents: query_transformer, Selector_agent, retriever, llm_answer_maker, critic_agent."
+      },
+      {
+        "name": "Planogram Vision LLM Suite",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Azure OpenAI vision functions for shelf-level product extraction, row counting, generic row description, daily KPI JSON, and final natural-language shelf answers after Roboflow cropping.",
+        "inputs": ["full shelf image", "YOLO-annotated row crops", "masked row images", "user query"],
+        "outputs": ["shelf_levels.json", "counts JSON", "daily KPI snapshot", "final shelf answer text"],
+        "model_used": "Azure OpenAI gpt-5.2 vision",
+        "tech_stack": ["Azure OpenAI", "OpenCV", "Pillow", "Roboflow"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage", "Roboflow"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "backend/planogram_agentic/llm_functions.py — count_function, generic_function, final_answer_function, shelf_levels, daily_kpi."
+      },
+      {
+        "name": "Shelf Layout Compliance Vision Agent",
+        "version": "1.0",
+        "category": "Quality & Compliance",
+        "function_summary": "Compares actual shelf photos against layout and agreement references; emits compliance rows and issues; deterministic scoring for placement, facings, pricing, layout match, and document clauses.",
+        "inputs": ["actual shelf image", "layout reference image", "agreement document text", "void_count", "misplacement_count"],
+        "outputs": ["shelf_compliance_rows", "issues list", "placement_score", "facings_score", "pricing_score", "layout_match_score", "document_rule_score", "recommended_actions"],
+        "model_used": "Azure OpenAI gpt-5.2 vision + deterministic compliance_scoring.py",
+        "tech_stack": ["Azure OpenAI", "Python"],
+        "integrations": ["Azure OpenAI", "Azure Blob Storage"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "POST /api/planogram/shelf-compliance and related complete-report endpoints."
+      },
+      {
+        "name": "Competitive Shelf Intelligence Scorer",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Computes Mars visibility, competitor pressure, promo and shelf position scores from vision-extracted brand facings using weighted shelf-level rules.",
+        "inputs": ["vision shelf rows with brand, facings, shelf_level"],
+        "outputs": ["mars_visibility_score", "competitor_pressure_score", "overall_competitive_score", "brand_occupancy", "placement_issues"],
+        "model_used": "Deterministic (no LLM for scores)",
+        "tech_stack": ["Python"],
+        "integrations": [],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "backend/competitive_scoring.py; POST /api/competitive/analyze."
+      },
+      {
+        "name": "Final Answer Rewriter",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Post-processes combined vision+SQL+semantic draft answers into concise structured user-facing text without adding new facts.",
+        "inputs": ["original question", "draft answer"],
+        "outputs": ["final_answer_text"],
+        "model_used": "Azure OpenAI gpt-5.2",
+        "tech_stack": ["Azure OpenAI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Toggle via UNIFIED_ENABLE_FINAL_REWRITE env in Unified_Mdb.py."
+      },
+      {
+        "name": "Roboflow Shelf Row Detector",
+        "version": "1.0",
+        "category": "Supply Chain & Logistics",
+        "function_summary": "Segments shelf rows and detects product bounding boxes; writes cropped and annotated artifacts to Azure Blob for downstream vision LLMs.",
+        "inputs": ["shelf image bytes"],
+        "outputs": ["row crops", "products_detected annotations", "metadata.json"],
+        "model_used": "Roboflow YOLO (row project v4, product project v3)",
+        "tech_stack": ["Roboflow", "OpenCV"],
+        "integrations": ["Roboflow API", "Azure Blob Storage"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "planogram_agentic/detect_crop.py; triggered on upload via planogram_upload.py."
+      },
+      {
+        "name": "Mars Sales Order Simulator",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "CatBoost/sklearn regression predicts demand and realized sales under promotion, price, and stock constraints for Snickers/Mars/Twix SKUs.",
+        "inputs": ["promotion_discount", "price", "sku_id", "store_id", "horizon_weeks", "stock_units"],
+        "outputs": ["projected units", "revenue uplift", "margin", "order recommendation", "risk flags"],
+        "model_used": "CatBoostRegressor (fallback sklearn)",
+        "tech_stack": ["CatBoost", "scikit-learn", "pandas"],
+        "integrations": [],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "Trained from Soft_Drinks_Sales_Q1_2026.xlsx; POST /api/simulator/run."
+      },
+      {
+        "name": "Executive Action Card Writer",
+        "version": "1.0",
+        "category": "Sales & Revenue",
+        "function_summary": "Generates short action-oriented title and subtitle text for field executive promo, compliance, and recommended action cards.",
+        "inputs": ["action dict with store and KPI flags"],
+        "outputs": ["title", "subtitle"],
+        "model_used": "Azure OpenAI (planogram_agentic deployment)",
+        "tech_stack": ["Azure OpenAI"],
+        "integrations": ["Azure OpenAI"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "app/services/llm_action_text_service.py; enrich_actions_with_llm."
+      },
+      {
+        "name": "Planogram Image Semantic Search",
+        "version": "1.0",
+        "category": "Document & Data",
+        "function_summary": "Embeds shelf images with Azure AI Vision, vector-searches Azure AI Search by supermarket, and validates matches with GPT before returning blob hits.",
+        "inputs": ["natural language query", "supermarket prefix"],
+        "outputs": ["ranked blob images", "validation reasons", "SAS URLs"],
+        "model_used": "Azure AI Vision embeddings + Azure OpenAI gpt-5.2 validation",
+        "tech_stack": ["Azure AI Vision", "Azure AI Search", "Azure OpenAI"],
+        "integrations": ["Azure AI Vision", "Azure AI Search", "Azure Blob Storage", "Azure OpenAI"],
+        "origin_project": "Mars Sales Genie (Copilot) / Unified View",
+        "origin_client": "Mars",
+        "vertical": "CPG / Retail",
+        "status": "available",
+        "typical_accuracy": null,
+        "notes": "POST /api/planogram/semantic-search; index image_embeddings_index."
+      }
+    ]
+  }
+]

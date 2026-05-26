@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.env
+.env.*
+!.env.example
+data/sessions/*.json
+.git
+*.md
+.pytest_cache
+.mypy_cache

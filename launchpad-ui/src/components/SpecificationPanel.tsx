@@ -16,9 +16,19 @@ export function SpecificationPanel({ spec }: Props) {
         <h2>Specification</h2>
         <span
           className={`spec-badge spec-badge--${spec.status}`}
-          title={spec.status === "ready" ? "Ready for Phase 3" : "Gathering requirements & flow"}
+          title={
+            spec.status === "ready"
+              ? "Ready for Phase 3"
+              : spec.status === "sufficient"
+                ? "Core spec complete — optional fields remain"
+                : "Gathering requirements & flow"
+          }
         >
-          {spec.status === "ready" ? "Ready" : "In progress"}
+          {spec.status === "ready"
+            ? "Ready"
+            : spec.status === "sufficient"
+              ? "Sufficient"
+              : "In progress"}
         </span>
       </header>
 
@@ -30,6 +40,23 @@ export function SpecificationPanel({ spec }: Props) {
           {known} of {total} fields confirmed ({pct}%)
         </p>
       </div>
+
+      {spec.catalog_hints && spec.catalog_hints.length > 0 ? (
+        <section className="spec-catalog">
+          <h3>Similar Affine agents</h3>
+          <ul className="spec-catalog__list">
+            {spec.catalog_hints.map((h) => (
+              <li key={h.agent_id}>
+                <strong>{h.name}</strong>
+                <span className="spec-catalog__meta">
+                  {h.category}
+                  {h.origin_client ? ` · ${h.origin_client}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <ul className="spec-checklist">
         {FIELD_ORDER.map((key) => {
@@ -74,6 +101,26 @@ export function SpecificationPanel({ spec }: Props) {
           </div>
         ))}
       </dl>
+
+      {spec.graph_draft && spec.graph_draft.nodes.length > 0 ? (
+        <section className="spec-graph">
+          <h3>Graph draft (Phase 3)</h3>
+          <p className="spec-graph__meta">
+            {spec.graph_draft.nodes.length} nodes, {spec.graph_draft.edges.length}{" "}
+            edges
+          </p>
+          <ul className="spec-graph__nodes">
+            {spec.graph_draft.nodes.map((n) => (
+              <li key={n.id}>
+                <code>{n.id}</code> — {n.label}
+                {n.type === "agent" && n.agent_id ? (
+                  <span className="spec-graph__agent"> ({n.agent_id})</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {spec.architecture_blueprint ? (
         <section className="spec-blueprint">
