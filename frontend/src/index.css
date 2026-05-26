@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.react-flow__controls button:hover {
+  background: rgba(59, 130, 246, 0.15) !important;
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.animate-flow-dash {
+  animation: flow-dash 1.2s linear infinite;
+}
+
+/* React Flow canvas — full panel, pan/zoom (no CSS scale compression) */
+.launchpad-flow-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.launchpad-flow-canvas .launchpad-react-flow {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.launchpad-flow-canvas .react-flow__viewport {
+  will-change: transform;
+}
+
+.launchpad-flow-minimap {
+  margin-bottom: 12px !important;
+  margin-right: 12px !important;
+  width: 128px !important;
+  height: 88px !important;
+  border-radius: 8px !important;
+  border: 1px solid #1e2a3a !important;
+  background: rgba(15, 20, 28, 0.95) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.launchpad-flow-controls {
+  border-radius: 8px !important;
+  border: 1px solid #1e2a3a !important;
+  background: rgba(15, 20, 28, 0.92) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.launchpad-flow-controls button {
+  background: rgba(15, 20, 28, 0.95) !important;
+  border-color: #1e2a3a !important;
+  color: #94a3b8 !important;
+}
+
+.launchpad-flow-controls button:hover {
+  background: rgba(59, 130, 246, 0.12) !important;
+}

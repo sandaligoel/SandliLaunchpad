@@ -1,0 +1,12 @@
+.env
+.venv/
+frontend/node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+data/sessions/*.json
+!data/sessions/.gitkeep

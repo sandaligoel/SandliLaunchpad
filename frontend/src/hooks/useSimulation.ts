@@ -1,0 +1,279 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  applyEdgeChanges,
+  applyNodeChanges,
+  type Edge,
+  type Node,
+  type OnEdgesChange,
+  type OnNodesChange,
+} from "@xyflow/react";
+import type { ArchitecturePlan, FlowEdgeData, FlowNodeData } from "@/types/plan";
+import { buildGraphStructure, type GraphStructure } from "@/lib/buildGraphStructure";
+import { calculateLayout, type LayoutMeta } from "@/layout/calculateLayout";
+
+function walkOrder(nodes: Node<FlowNodeData>[], edges: Edge<FlowEdgeData>[]): string[] {
+  const orch = nodes.find((n) => n.data.kind === "orchestrator");
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const visit = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const n = nodes.find((x) => x.id === id);
+    if (
+      n &&
+      !n.id.startsWith("__lane_") &&
+      n.type !== "laneLabel" &&
+      n.type !== "laneBand" &&
+      n.type !== "parallelGroup"
+    ) {
+      order.push(id);
+    }
+    edges.filter((e) => e.source === id).forEach((e) => visit(e.target));
+  };
+  if (orch) visit(orch.id);
+  nodes.forEach((n) => {
+    if (!seen.has(n.id) && !n.id.startsWith("__")) visit(n.id);
+  });
+  return order;
+}
+
+function isLayoutNode(n: Node<FlowNodeData>): boolean {
+  return (
+    !n.id.startsWith("__lane_") &&
+    n.type !== "laneBand" &&
+    !(n.type === "parallelGroup" && n.id.startsWith("__parallel_bg_"))
+  );
+}
+
+export function useSimulation(plan: ArchitecturePlan | null) {
+  const [nodes, setNodes] = useState<Node<FlowNodeData>[]>([]);
+  const [edges, setEdges] = useState<Edge<FlowEdgeData>[]>([]);
+  const [simulating, setSimulating] = useState(false);
+  const [stepIndex, setStepIndex] = useState(-1);
+  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [layoutMeta, setLayoutMeta] = useState<LayoutMeta | null>(null);
+  const orderRef = useRef<string[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const structureRef = useRef<GraphStructure | null>(null);
+
+  const runLayout = useCallback(
+    async (structure: GraphStructure, nodeOverrides?: Node<FlowNodeData>[]) => {
+      setLayoutLoading(true);
+      try {
+        const baseNodes = nodeOverrides ?? structure.nodes;
+        const { nodes: laid, meta } = await calculateLayout(
+          baseNodes,
+          structure.edges,
+          structure.parallel
+        );
+        setNodes(laid);
+        setEdges(structure.edges);
+        setLayoutMeta(meta);
+        orderRef.current = walkOrder(laid, structure.edges);
+      } finally {
+        setLayoutLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!plan) {
+      setNodes([]);
+      setEdges([]);
+      setLayoutMeta(null);
+      structureRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const structure = buildGraphStructure(plan);
+      if (cancelled) return;
+      structureRef.current = structure;
+      await runLayout(structure);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [plan, runLayout]);
+
+  const applyHighlight = useCallback((activeId: string | null) => {
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isActive: n.id === activeId,
+          isHighlighted: false,
+          runtime: {
+            ...n.data.runtime,
+            status:
+              n.id === activeId
+                ? "running"
+                : orderRef.current.indexOf(n.id) >= 0 &&
+                    orderRef.current.indexOf(n.id) <
+                      orderRef.current.indexOf(activeId || "")
+                  ? "success"
+                  : "idle",
+          },
+        },
+      }))
+    );
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        data: {
+          edgeKind: e.data?.edgeKind ?? "sequential",
+          label: e.data?.label,
+          animated: e.data?.animated,
+          isActive: activeId ? e.source === activeId || e.target === activeId : false,
+        },
+      }))
+    );
+  }, []);
+
+  const stop = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setSimulating(false);
+    setStepIndex(-1);
+    applyHighlight(null);
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: { ...n.data, isActive: false, runtime: { ...n.data.runtime, status: "idle" } },
+      }))
+    );
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        data: {
+          edgeKind: e.data?.edgeKind ?? "sequential",
+          label: e.data?.label,
+          animated: e.data?.animated,
+          isActive: false,
+        },
+      }))
+    );
+  }, [applyHighlight]);
+
+  const run = useCallback(() => {
+    stop();
+    const order = orderRef.current.filter((id) => {
+      const n = nodes.find((x) => x.id === id);
+      return n && isLayoutNode(n);
+    });
+    if (!order.length) return;
+    setSimulating(true);
+    let i = 0;
+    const tick = () => {
+      if (i >= order.length) {
+        setSimulating(false);
+        applyHighlight(null);
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            data: { ...n.data, runtime: { ...n.data.runtime, status: "success" }, isActive: false },
+          }))
+        );
+        return;
+      }
+      setStepIndex(i);
+      applyHighlight(order[i]);
+      i += 1;
+      timerRef.current = setTimeout(tick, 900);
+    };
+    tick();
+  }, [applyHighlight, nodes, stop]);
+
+  const toggleExpand = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => {
+        const updated = nds.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, expanded: !n.data.expanded } } : n
+        );
+        const structure = structureRef.current;
+        if (structure) {
+          const forLayout = updated.filter(
+            (n) =>
+              isLayoutNode(n) ||
+              n.id.startsWith("__lane_") ||
+              n.type === "laneBand" ||
+              (n.type === "parallelGroup" && n.id.startsWith("__parallel_bg_"))
+          );
+          void calculateLayout(forLayout, structure.edges, structure.parallel).then(
+            ({ nodes: laid, meta }) => {
+              setNodes(laid);
+              setLayoutMeta(meta);
+            }
+          );
+        }
+        return updated;
+      });
+    },
+    []
+  );
+
+  const selectNode = useCallback((nodeId: string | null) => {
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        data: { ...n.data, isHighlighted: nodeId ? n.id === nodeId : false },
+      }))
+    );
+  }, []);
+
+  const onNodesChange: OnNodesChange = useCallback((changes) => {
+    setNodes((nds) => applyNodeChanges(changes, nds) as Node<FlowNodeData>[]);
+  }, []);
+
+  const onEdgesChange: OnEdgesChange = useCallback((changes) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds) as Edge<FlowEdgeData>[]);
+  }, []);
+
+  const [stats, setStats] = useState<{
+    agents: number;
+    reuse: number;
+    adapt: number;
+    build: number;
+    parallelBranches: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!plan) {
+      setStats(null);
+      return;
+    }
+    const agents = plan.nodes.filter((n) => n.type === "agent");
+    let reuse = 0,
+      adapt = 0,
+      build = 0;
+    agents.forEach((a) => {
+      if (a.reuse_decision === "reuse") reuse++;
+      else if (a.reuse_decision === "adapt") adapt++;
+      else build++;
+    });
+    setStats({
+      agents: agents.length,
+      reuse,
+      adapt,
+      build,
+      parallelBranches: structureRef.current?.parallel?.branchIds.length ?? 0,
+    });
+  }, [plan, nodes.length]);
+
+  return {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    simulating,
+    stepIndex,
+    layoutLoading,
+    layoutMeta,
+    run,
+    stop,
+    toggleExpand,
+    selectNode,
+    stats,
+  };
+}

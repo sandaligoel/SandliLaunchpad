@@ -1,0 +1,13 @@
+[project]
+name = "agent-knowledge-retrieval"
+version = "1.0.0"
+description = "Enterprise AI architecture knowledge retrieval system"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

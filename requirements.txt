@@ -1,0 +1,17 @@
+# Agent Knowledge Retrieval System — Phase 1
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+python-multipart>=0.0.12
+httpx>=0.28.0
+openai>=1.55.0
+azure-search-documents>=11.6.0
+azure-identity>=1.19.0
+PyMuPDF>=1.24.0
+pdfplumber>=0.11.0
+tenacity>=9.0.0
+structlog>=24.4.0
+python-dotenv>=1.0.0
+aiofiles>=24.1.0
+numpy>=2.0.0
