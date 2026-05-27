@@ -28,6 +28,25 @@ SLOT_RELATED: dict[str, list[str]] = {
 _HELPER_WORD = re.compile(r"\bhelpers?\b", re.IGNORECASE)
 
 
+def compact_spec_json(spec: ArchitectureSpec, *, max_value_chars: int = 400) -> str:
+    """Smaller JSON for LLM calls — non-empty slots plus labels for empty required slots."""
+    rows = []
+    for s in sorted(spec.slots, key=lambda x: x.priority):
+        if s.value.strip():
+            val = s.value.strip()
+            if len(val) > max_value_chars:
+                val = val[:max_value_chars] + "…"
+            rows.append(
+                {
+                    "key": s.key,
+                    "label": s.label,
+                    "value": val,
+                    "status": s.status.value,
+                }
+            )
+    return json.dumps(rows, indent=2)
+
+
 def spec_slots_json(spec: ArchitectureSpec) -> str:
     rows = [
         {

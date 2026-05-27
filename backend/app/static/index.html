@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Affine Agent Launchpad</title>
+  <style>
+    :root {
+      --bg: #0c1117; --surface: #151b24; --surface2: #1a222d; --border: #2a3544;
+      --text: #e8edf4; --muted: #8b9cb3; --accent: #3b82f6; --accent-dim: #1e3a5f;
+      --success: #22c55e; --reuse: #16a34a; --adapt: #0d9488; --build: #2563eb;
+      --gateway: #334155; --hitl: #ea580c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Inter", system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+    header.app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface);
+      flex-shrink: 0;
+    }
+    .brand { font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; }
+    .brand span { color: var(--muted); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+    .stepper { display: flex; gap: 0.35rem; align-items: center; }
+    .step {
+      display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.85rem;
+      border-radius: 6px; border: 1px solid transparent; color: var(--muted);
+      font-size: 0.8rem; cursor: pointer; background: transparent;
+    }
+    .step .num { width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center; font-size: 0.7rem; }
+    .step.active { color: var(--text); border-color: var(--accent); background: rgba(59,130,246,0.12); }
+    .step.active .num { background: var(--accent); border-color: var(--accent); color: white; }
+    .step.done .num { background: var(--success); border-color: var(--success); color: white; }
+    .header-links a { color: var(--muted); font-size: 0.75rem; margin-left: 1rem; text-decoration: none; }
+    .header-links a:hover { color: var(--accent); }
+
+    .workspace {
+      flex: 1; display: grid;
+      grid-template-columns: 280px 1fr 260px;
+      min-height: 0; min-width: 0; overflow: hidden;
+    }
+    .workspace.no-right { grid-template-columns: 280px 1fr; }
+
+    aside.sidebar-left {
+      border-right: 1px solid var(--border); background: var(--surface);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .sidebar-title {
+      padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--muted); border-bottom: 1px solid var(--border);
+    }
+    .session-bar {
+      padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-scroll { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .chat-bubble {
+      padding: 0.75rem 0.9rem; border-radius: 10px; font-size: 0.82rem; line-height: 1.5;
+      max-width: 100%;
+    }
+    .chat-bubble.you { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.35); align-self: stretch; }
+    .chat-bubble.you .who { font-size: 0.65rem; font-weight: 700; color: var(--accent); margin-bottom: 0.35rem; }
+    .chat-bubble.system { background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 0.78rem; }
+    .chat-bubble.answer { background: var(--surface2); border: 1px solid var(--border); }
+    .chat-bubble.answer .who { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .chat-bubble.question { background: var(--surface2); border: 1px solid rgba(59,130,246,0.35); }
+    .chat-bubble.question .who { font-size: 0.65rem; font-weight: 700; color: var(--accent); margin-bottom: 0.35rem; }
+    .chat-bubble.event { background: var(--bg); border: 1px dashed var(--border); color: var(--muted); font-size: 0.76rem; }
+    .chat-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; line-height: 1.35; }
+    .chat-topic-section {
+      display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0 0.15rem;
+      padding-top: 0.5rem;
+    }
+    .chat-topic-section:first-child { padding-top: 0; }
+    .chat-topic-pill {
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .chat-topic-badge {
+      display: inline-block; font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 0.4rem; padding: 0.15rem 0.45rem;
+      border-radius: 4px; background: rgba(59,130,246,0.12); color: var(--accent);
+    }
+    .chat-bubble.answer .chat-topic-badge { background: rgba(148,163,184,0.12); color: #94a3b8; }
+    .chat-bubble.event .chat-topic-badge { background: rgba(148,163,184,0.08); color: var(--muted); }
+    .flow-narrative {
+      font-size: 0.78rem; color: var(--muted); line-height: 1.45; margin: 0.5rem 0 0.75rem;
+      padding: 0.65rem 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+    }
+    .sidebar-footer {
+      padding: 0.75rem 1rem; border-top: 1px solid var(--border);
+    }
+    .ready-banner {
+      padding: 0.65rem 0.75rem; border-radius: 8px; border: 1px solid rgba(34,197,94,0.4);
+      background: rgba(34,197,94,0.08); font-size: 0.78rem; color: #86efac; line-height: 1.4;
+    }
+
+    main.center-panel {
+      display: flex; flex-direction: column; min-height: 0; min-width: 0;
+      background: var(--bg); flex: 1; overflow: hidden;
+    }
+    .center-header {
+      padding: 1rem 1.25rem 0.5rem; border-bottom: 1px solid var(--border);
+    }
+    .center-header h2 { font-size: 1rem; font-weight: 600; }
+    .center-header p { font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
+    .center-body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem 1.5rem; min-height: 0; }
+    .center-body.arch-phase { overflow: hidden; padding: 0.5rem 1rem 0.75rem; display: flex; flex-direction: column; }
+
+    .phase { display: none; }
+    .phase.active { display: block; }
+    #phase-architecture.active {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .arch-flow-host {
+      flex: 1; min-height: 0; min-width: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      background: #060a10;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      position: relative;
+    }
+    .arch-flow-host > * {
+      flex: 1; min-height: 0; min-width: 0;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 0.65rem 0.85rem; font-size: 0.85rem;
+    }
+    textarea { min-height: 88px; resize: vertical; line-height: 1.45; }
+    button.primary {
+      background: var(--accent); color: white; border: none; border-radius: 8px;
+      padding: 0.55rem 1rem; cursor: pointer; font-size: 0.85rem; margin-top: 0.75rem;
+    }
+    button.primary:hover { filter: brightness(1.1); }
+    button.secondary {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 0.55rem 1rem; cursor: pointer; font-size: 0.85rem; margin-top: 0.5rem; margin-left: 0.5rem;
+    }
+
+    .question-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem 1.1rem; margin-bottom: 1rem;
+    }
+    .question-card .q-topic { font-size: 0.72rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+    .question-card .q-text { font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.75rem; }
+    .option-list { display: flex; flex-direction: column; gap: 0.45rem; }
+    .option-item {
+      display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.6rem;
+      padding: 0.7rem 0.85rem; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); cursor: pointer; text-align: left;
+    }
+    .option-item:hover, .option-item.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+    .option-item input[type="radio"] { width: 1rem; height: 1rem; margin-top: 0.15rem; accent-color: var(--accent); }
+    .option-item .opt-label { font-size: 0.85rem; font-weight: 600; flex: 1; }
+    .option-item .opt-hint { flex: 1 1 100%; margin-left: 1.6rem; font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+    .custom-wrap { display: none; margin-top: 0.75rem; }
+    .custom-wrap.visible { display: block; }
+
+    .spec-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .spec-row {
+      display: grid; grid-template-columns: 140px 1fr auto;
+      gap: 0.75rem; align-items: start; padding: 0.65rem 0.85rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      font-size: 0.82rem;
+    }
+    .spec-row .spec-key { color: var(--muted); font-weight: 500; }
+    .spec-row .spec-val { line-height: 1.4; }
+    .spec-row .spec-status { font-size: 0.68rem; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
+    .spec-row.confirmed .spec-status { background: rgba(34,197,94,0.2); color: #86efac; }
+    .spec-row.inferred .spec-status { background: rgba(167,139,250,0.2); color: #c4b5fd; }
+    .spec-row.empty .spec-status { background: var(--border); color: var(--muted); }
+
+    .graph-area {
+      flex: 1; min-height: 0; height: 100%;
+      border: 1px solid var(--border); border-radius: 12px;
+      background: linear-gradient(180deg, #121820 0%, #0c1117 100%);
+      overflow: hidden;
+    }
+    .flow-canvas {
+      height: 100%; display: flex; flex-direction: column;
+      padding: 0.65rem 0.85rem; overflow: hidden; min-width: 0;
+    }
+    .flow-fit-scaler {
+      flex: 1; min-height: 0; min-width: 0; width: 100%;
+      overflow: hidden; display: flex; justify-content: center; align-items: flex-start;
+    }
+    #flow-fit-inner {
+      width: 100%; max-width: 100%; transform-origin: top center;
+      display: flex; flex-direction: column; gap: 0.55rem;
+    }
+    .flow-section { flex-shrink: 0; }
+    .flow-section.agents-section {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+    }
+    .flow-section-label {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--muted); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .flow-section-label::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+    }
+    .flow-top-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.45rem; width: 100%;
+    }
+    .flow-card {
+      border-radius: 10px; padding: 0.5rem 0.55rem 0.45rem 1.6rem;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      position: relative; min-width: 0;
+    }
+    .flow-card .fc-step {
+      position: absolute; left: 0.4rem; top: 0.42rem;
+      font-size: 0.62rem; font-weight: 800; color: var(--muted);
+      width: 1rem; text-align: center;
+    }
+    .flow-card .fc-title {
+      font-size: 0.74rem; font-weight: 600; line-height: 1.25;
+      margin-bottom: 0.2rem;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; word-break: break-word;
+    }
+    .flow-card .fc-badge {
+      display: inline-block; font-size: 0.58rem; font-weight: 700;
+      letter-spacing: 0.04em; padding: 0.12rem 0.35rem; border-radius: 4px;
+    }
+    .flow-card.gateway { border-color: #475569; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+    .flow-card.gateway .fc-badge { background: rgba(148,163,184,0.25); color: #cbd5e1; }
+    .flow-card.orchestrator { border-color: #3b82f6; background: linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 55%, #1e3a5f 100%); }
+    .flow-card.orchestrator .fc-badge { background: rgba(59,130,246,0.35); color: #93c5fd; }
+    .flow-card.human { border-color: #ea580c; background: linear-gradient(135deg, #431407 0%, #9a3412 100%); }
+    .flow-card.human .fc-badge { background: rgba(234,88,12,0.35); color: #fdba74; }
+    .flow-card.reuse { border-color: #16a34a; box-shadow: 0 0 0 1px rgba(34,197,94,0.15); }
+    .flow-card.reuse .fc-badge { background: rgba(34,197,94,0.25); color: #86efac; }
+    .flow-card.adapt { border-color: #0d9488; }
+    .flow-card.adapt .fc-badge { background: rgba(13,148,136,0.25); color: #5eead4; }
+    .flow-card.build { border-color: #2563eb; }
+    .flow-card.build .fc-badge { background: rgba(37,99,235,0.25); color: #93c5fd; }
+    .agent-track-wrap {
+      flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto;
+      border-radius: 10px; border: 1px dashed var(--border);
+      background: rgba(15,20,28,0.6); padding: 0.45rem;
+    }
+    .agent-track {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 0.4rem; width: 100%; max-width: 100%;
+      overflow: hidden;
+    }
+    .flow-hint {
+      font-size: 0.68rem; color: var(--muted); margin-top: 0.35rem; text-align: center;
+    }
+    .flow-card.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .arch-toolbar {
+      flex-shrink: 0; display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem;
+    }
+    .arch-toolbar button {
+      font-size: 0.75rem; padding: 0.35rem 0.65rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer;
+    }
+    .arch-toolbar button:hover { color: var(--text); border-color: var(--accent); }
+    #plan-status { flex-shrink: 0; padding-top: 0.35rem; font-size: 0.78rem; }
+
+    aside.sidebar-right {
+      border-left: 1px solid var(--border); background: var(--surface);
+      display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
+    }
+    .panel-block { padding: 1rem; border-bottom: 1px solid var(--border); }
+    .panel-block h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.65rem; }
+    .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; margin-bottom: 0.4rem; color: var(--muted); }
+    .legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+    .overview-stats { font-size: 0.85rem; line-height: 1.6; }
+    .flow-order { list-style: none; max-height: 42vh; overflow-y: auto; }
+    .flow-order li {
+      display: flex; align-items: center; gap: 0.55rem; padding: 0.45rem 0.5rem;
+      border-radius: 6px; font-size: 0.8rem; cursor: pointer; margin-bottom: 0.2rem;
+    }
+    .flow-order li:hover, .flow-order li.selected { background: rgba(59,130,246,0.12); }
+    .flow-order .idx { color: var(--muted); font-size: 0.72rem; min-width: 1.1rem; }
+    .flow-order .swatch { width: 10px; height: 10px; border-radius: 2px; }
+    .flow-order .name { flex: 1; line-height: 1.3; }
+    .flow-order .tag { font-size: 0.62rem; padding: 0.1rem 0.35rem; border-radius: 3px; font-weight: 600; }
+
+    .catalog-drawer { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
+    .catalog-drawer.open { display: flex; align-items: center; justify-content: center; }
+    .catalog-modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      width: min(520px, 90vw); max-height: 80vh; overflow-y: auto; padding: 1.25rem;
+    }
+    .progress-thin { height: 3px; background: var(--border); border-radius: 2px; margin: 0.5rem 0; overflow: hidden; }
+    .progress-thin .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">Affine Agent Launchpad</div>
+    <nav class="stepper" id="stepper">
+      <button type="button" class="step active" data-phase="interview"><span class="num">1</span> Interview</button>
+      <button type="button" class="step" data-phase="specification"><span class="num">2</span> Specification</button>
+      <button type="button" class="step" data-phase="architecture"><span class="num">3</span> Architecture</button>
+    </nav>
+    <div class="header-links">
+      <a href="#" id="link-catalog">Catalog</a>
+      <a href="/docs" target="_blank">API</a>
+    </div>
+  </header>
+
+  <div class="workspace no-right" id="workspace">
+    <aside class="sidebar-left">
+      <div class="sidebar-title">Interview</div>
+      <div class="session-bar" id="session-bar">Session — not started</div>
+      <div class="chat-scroll" id="chat-scroll"></div>
+      <div class="sidebar-footer" id="sidebar-footer"></div>
+    </aside>
+
+    <main class="center-panel">
+      <div class="center-header" id="center-header">
+        <h2 id="center-title">Interview</h2>
+        <p id="center-subtitle">Tell us what you're trying to solve in everyday language.</p>
+      </div>
+      <div class="center-body">
+        <!-- Phase 1: Interview -->
+        <div id="phase-interview" class="phase active">
+          <div id="start-block">
+            <label class="sidebar-title" style="display:block;padding:0;margin-bottom:0.5rem;">Your problem</label>
+            <textarea id="problem" placeholder="e.g. We are a health supplements brand on Amazon. We generate product images from reference photos but fail marketplace compliance because infographic text makes unsubstantiated health claims."></textarea>
+            <button type="button" class="primary" id="btn-start-interview">Start interview</button>
+          </div>
+          <div id="question-block" style="display:none">
+            <div class="question-card">
+              <div class="q-topic" id="target-slot"></div>
+              <div class="q-text" id="question-text"></div>
+              <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.5rem;">Pick the closest answer, or choose Other to type your own.</p>
+              <div class="option-list" id="option-list"></div>
+              <div class="custom-wrap" id="custom-answer-wrap">
+                <textarea id="custom-answer" placeholder="Type your answer…" style="margin-top:0.5rem;"></textarea>
+              </div>
+            </div>
+            <button type="button" class="primary" id="btn-submit-answer">Submit answer</button>
+            <button type="button" class="secondary" id="btn-force-complete">Finish early →</button>
+          </div>
+        </div>
+
+        <!-- Phase 2: Specification -->
+        <div id="phase-specification" class="phase">
+          <div class="progress-thin"><div class="fill" id="spec-progress" style="width:0%"></div></div>
+          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;" id="spec-summary"></p>
+          <div class="spec-list" id="spec-list"></div>
+          <button type="button" class="primary" id="btn-go-architecture" style="margin-top:1rem;">Generate architecture →</button>
+        </div>
+
+        <!-- Phase 3: Architecture (React Flow DAG) -->
+        <div id="phase-architecture" class="phase">
+          <div id="architecture-flow-root" class="arch-flow-host"></div>
+          <p id="plan-status"></p>
+        </div>
+      </div>
+    </main>
+
+    <aside class="sidebar-right" id="sidebar-right" style="display:none">
+      <div class="panel-block">
+        <h3>Legend</h3>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--reuse)"></span> Reuse catalog agent</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--adapt)"></span> Adapt existing agent</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--build)"></span> Build new component</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--hitl)"></span> Human / HITL step</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--gateway)"></span> Entry / routing</div>
+      </div>
+      <div class="panel-block">
+        <h3>Overview</h3>
+        <div class="overview-stats" id="overview-stats">—</div>
+      </div>
+      <div class="panel-block">
+        <h3>Flow order</h3>
+        <ol class="flow-order" id="flow-order"></ol>
+      </div>
+    </aside>
+  </div>
+
+  <div class="catalog-drawer" id="catalog-drawer">
+    <div class="catalog-modal">
+      <h2 style="font-size:1rem;margin-bottom:0.75rem;">Catalog</h2>
+      <button type="button" class="primary" id="btn-ingest">Ingest solution_agents.pdf</button>
+      <p id="ingest-status" style="font-size:0.8rem;color:var(--muted);margin:0.75rem 0;"></p>
+      <textarea id="query" placeholder="Search agents…" rows="2"></textarea>
+      <button type="button" class="secondary" id="btn-search">Search</button>
+      <div id="search-results" style="margin-top:0.75rem;"></div>
+      <button type="button" class="secondary" id="btn-close-catalog" style="margin-top:1rem;">Close</button>
+    </div>
+  </div>
+
+  <input type="hidden" id="session-id" />
+
+  <script>
+    const API = "/api/v1";
+    let sessionId = "";
+    let currentSpec = null;
+    let currentPhase = "interview";
+    let lastPlan = null;
+    let chatMessages = [];
+    const CUSTOM_OPTION_ID = "__custom__";
+    let selectedOptionId = null;
+
+    const PHASE_META = {
+      interview: { title: "Interview", subtitle: "A short Q&A to capture how your workflow should work." },
+      specification: { title: "Your answers", subtitle: "Review what we captured before building the diagram." },
+      architecture: { title: "Workflow diagram", subtitle: "A visual map of your steps and how they connect." },
+    };
+
+    function escapeHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s ?? "";
+      return d.innerHTML;
+    }
+
+    function setPhase(phase) {
+      currentPhase = phase;
+      document.querySelector(".center-body").classList.toggle("arch-phase", phase === "architecture");
+      document.querySelectorAll(".step").forEach((s) => {
+        const p = s.dataset.phase;
+        s.classList.remove("active", "done");
+        if (p === phase) s.classList.add("active");
+        else if (
+          (p === "interview" && (phase === "specification" || phase === "architecture")) ||
+          (p === "specification" && phase === "architecture")
+        ) s.classList.add("done");
+      });
+      document.querySelectorAll(".phase").forEach((el) => el.classList.remove("active"));
+      document.getElementById("phase-" + phase).classList.add("active");
+      const ws = document.getElementById("workspace");
+      const sr = document.getElementById("sidebar-right");
+      if (phase === "architecture") {
+        ws.classList.remove("no-right");
+        sr.style.display = "flex";
+      } else {
+        ws.classList.add("no-right");
+        sr.style.display = "none";
+      }
+      document.getElementById("center-title").textContent = PHASE_META[phase].title;
+      document.getElementById("center-subtitle").textContent = PHASE_META[phase].subtitle;
+      if (phase === "architecture") {
+        if (sessionId && !lastPlan) generatePlan();
+        else if (lastPlan) mountArchitectureFlow(lastPlan);
+      }
+    }
+
+    document.querySelectorAll(".step").forEach((btn) => {
+      btn.onclick = () => {
+        const p = btn.dataset.phase;
+        if (p === "specification" && !sessionId) { alert("Start an interview first"); return; }
+        if (p === "architecture" && !sessionId) { alert("Start an interview first"); return; }
+        if (p === "specification") renderSpecification(currentSpec);
+        setPhase(p);
+      };
+    });
+
+    const CHAT_TOPIC_COLORS = {
+      problem: "#3b82f6",
+      flow_steps: "#0ea5e9",
+      agent_roles: "#6366f1",
+      data_sources: "#64748b",
+      data_volume_scale: "#78716c",
+      orchestration_pattern: "#8b5cf6",
+      retrieval_required: "#14b8a6",
+      knowledge_graph_scope: "#a855f7",
+      agent_tools: "#06b6d4",
+      model_constraints: "#ec4899",
+      integrations: "#f59e0b",
+      deployment_target: "#22c55e",
+      cloud_provider: "#84cc16",
+      human_in_the_loop: "#f97316",
+      failure_escalation: "#ef4444",
+      setup: "#64748b",
+      specification: "#22c55e",
+      architecture: "#3b82f6",
+    };
+
+    function topicColor(topicKey) {
+      return CHAT_TOPIC_COLORS[topicKey] || "#64748b";
+    }
+
+    function renderChat() {
+      const el = document.getElementById("chat-scroll");
+      el.innerHTML = "";
+      chatMessages.forEach((m) => {
+        const topicKey = m.topicKey || m.kind || "";
+        const topicLabel = m.topic || "";
+        const showTopic = topicLabel && (m.kind === "question" || m.kind === "answer");
+        const div = document.createElement("div");
+        div.className = "chat-bubble " + (m.kind || m.role || "system");
+        let html = "";
+        if (showTopic) {
+          const color = topicColor(topicKey);
+          html += `<div class="chat-topic-badge" style="color:${color};border:1px solid ${color}33">${escapeHtml(topicLabel)}</div>`;
+        }
+        if (m.who) html += `<div class="who">${escapeHtml(m.who)}</div>`;
+        html += escapeHtml(m.text || "");
+        if (m.subtext) html += `<div class="chat-sub">${escapeHtml(m.subtext)}</div>`;
+        div.innerHTML = html;
+        el.appendChild(div);
+      });
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function addChatEntry(entry) {
+      chatMessages.push({
+        who: entry.who || "",
+        text: entry.text || "",
+        subtext: entry.subtext || "",
+        topic: entry.topic || "",
+        topicKey: entry.topicKey || entry.kind || "system",
+        role: entry.role || "system",
+        kind: entry.kind || entry.role || "system",
+      });
+      renderChat();
+    }
+
+    function slotLabelFromSpec(spec, key) {
+      const s = (spec?.slots || []).find((x) => x.key === key);
+      return s?.label || (key || "").replace(/_/g, " ");
+    }
+
+    function recordInferredSlots(spec) {
+      const inferred = (spec?.slots || []).filter(
+        (s) => s.value && (s.status === "inferred" || s.status === "confirmed")
+      );
+      if (!inferred.length) return;
+      const names = inferred.slice(0, 6).map((s) => s.label).join(", ");
+      const more = inferred.length > 6 ? ` (+${inferred.length - 6} more)` : "";
+      addChatEntry({
+        role: "system",
+        kind: "event",
+        topic: "Setup",
+        topicKey: "setup",
+        who: "Launchpad",
+        text: "Pre-filled from your problem statement",
+        subtext: names + more,
+      });
+    }
+
+    function recordLaunchpadQuestion(data) {
+      if (!data?.question) return;
+      const label =
+        data.target_slot_label ||
+        (data.target_slot || "").replace(/_/g, " ");
+      const slotKey = data.target_slot || "interview";
+      addChatEntry({
+        role: "assistant",
+        kind: "question",
+        topic: label,
+        topicKey: slotKey,
+        who: "Launchpad",
+        text: data.question,
+        subtext: data.is_followup ? "Can you add a little more?" : "Pick the closest match, or Other",
+      });
+    }
+
+    function recordSlotsUpdated(spec, keys, completionPct) {
+      if (!keys?.length) return;
+      const labels = keys.map((k) => slotLabelFromSpec(spec, k)).filter(Boolean);
+      const summary = labels.length ? labels.join(", ") : "your answer";
+      addChatEntry({
+        role: "system",
+        kind: "event",
+        topic: "",
+        topicKey: "setup",
+        who: "Launchpad",
+        text: "Got it — saved.",
+        subtext: `${summary} · ${completionPct || 0}% done`,
+      });
+    }
+
+    function getAnswerDisplay(options) {
+      if (selectedOptionId === CUSTOM_OPTION_ID) {
+        const custom = document.getElementById("custom-answer").value.trim();
+        return { text: custom, subtext: "Custom answer" };
+      }
+      const m = (options || []).find((o) => o.id === selectedOptionId);
+      if (!m) return { text: "", subtext: "" };
+      const sub =
+        m.value && m.value !== m.label
+          ? m.value.slice(0, 280) + (m.value.length > 280 ? "…" : "")
+          : "";
+      return { text: m.label, subtext: sub };
+    }
+
+    function updateSessionBar() {
+      const short = sessionId ? sessionId.slice(0, 8) : "—";
+      document.getElementById("session-bar").textContent = sessionId
+        ? `Session ${short}`
+        : "Session — not started";
+    }
+
+    function updateSidebarFooter(spec, isComplete) {
+      const foot = document.getElementById("sidebar-footer");
+      if (isComplete) {
+        foot.innerHTML = `<div class="ready-banner">Specification complete — ready for architecture generation (Phase 3).</div>`;
+      } else if (spec) {
+        foot.innerHTML = `<div class="progress-thin"><div class="fill" style="width:${spec.completion_pct || 0}%"></div></div>
+          <p style="font-size:0.75rem;color:var(--muted);margin-top:0.35rem;">${spec.completion_pct || 0}% complete</p>`;
+      } else foot.innerHTML = "";
+    }
+
+    async function parseJsonResponse(r) {
+      const text = await r.text();
+      try {
+        return { ok: r.ok, data: JSON.parse(text) };
+      } catch {
+        throw new Error(text.slice(0, 200) || r.statusText || "Server error");
+      }
+    }
+
+    function renderOptions(options) {
+      const list = document.getElementById("option-list");
+      const customWrap = document.getElementById("custom-answer-wrap");
+      list.innerHTML = "";
+      selectedOptionId = null;
+      customWrap.classList.remove("visible");
+      (options || []).forEach((opt) => {
+        const div = document.createElement("div");
+        div.className = "option-item";
+        div.dataset.optionId = opt.id;
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "opt";
+        const span = document.createElement("span");
+        span.className = "opt-label";
+        span.textContent = opt.label || opt.id;
+        div.appendChild(radio);
+        div.appendChild(span);
+        const hintText = (opt.value || "").trim();
+        if (hintText && hintText !== (opt.label || "").trim()) {
+          const hint = document.createElement("div");
+          hint.className = "opt-hint";
+          hint.textContent = hintText.length > 220 ? hintText.slice(0, 217) + "…" : hintText;
+          div.appendChild(hint);
+        }
+        const pick = () => { radio.checked = true; selectOption(opt.id); };
+        div.onclick = pick;
+        radio.onchange = pick;
+        list.appendChild(div);
+      });
+      const other = document.createElement("div");
+      other.className = "option-item";
+      other.dataset.optionId = CUSTOM_OPTION_ID;
+      other.innerHTML = `<input type="radio" name="opt" /><span class="opt-label"><strong>Other</strong> — enter manually</span>`;
+      other.onclick = () => selectOption(CUSTOM_OPTION_ID);
+      list.appendChild(other);
+    }
+
+    function selectOption(id) {
+      selectedOptionId = id;
+      document.querySelectorAll(".option-item").forEach((el) => {
+        el.classList.toggle("selected", el.dataset.optionId === id);
+        const inp = el.querySelector("input");
+        if (inp) inp.checked = el.dataset.optionId === id;
+      });
+      document.getElementById("custom-answer-wrap").classList.toggle("visible", id === CUSTOM_OPTION_ID);
+    }
+
+    function getAnswerPayload(options) {
+      if (selectedOptionId === CUSTOM_OPTION_ID) {
+        return document.getElementById("custom-answer").value.trim();
+      }
+      const m = (options || []).find((o) => o.id === selectedOptionId);
+      return m ? m.value : "";
+    }
+
+    function showQuestion(data) {
+      const qBlock = document.getElementById("question-block");
+      if (data.is_complete || !data.question) {
+        qBlock.style.display = "none";
+        return;
+      }
+      document.getElementById("start-block").style.display = "none";
+      qBlock.style.display = "block";
+      document.getElementById("question-text").textContent = data.question;
+      const slotLabel =
+        data.target_slot_label || (data.target_slot || "").replace(/_/g, " ");
+      document.getElementById("target-slot").textContent =
+        slotLabel + (data.is_followup ? " · more detail" : "");
+      renderOptions(data.options || []);
+    }
+
+    function renderSpecification(spec) {
+      if (!spec) return;
+      currentSpec = spec;
+      document.getElementById("spec-progress").style.width = (spec.completion_pct || 0) + "%";
+      document.getElementById("spec-summary").textContent =
+        `${spec.completion_pct || 0}% complete · ${(spec.slots || []).filter((s) => s.value).length} fields filled`;
+      const list = document.getElementById("spec-list");
+      list.innerHTML = "";
+      (spec.slots || []).forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "spec-row " + (s.status || "empty");
+        row.innerHTML = `
+          <span class="spec-key">${escapeHtml(s.label)}</span>
+          <span class="spec-val">${escapeHtml(s.value || "—")}</span>
+          <span class="spec-status">${escapeHtml(s.status || "empty")}</span>`;
+        list.appendChild(row);
+      });
+    }
+
+    function nodeTag(node) {
+      if (node.type === "human") return { tag: "HITL", cls: "human", color: "#ea580c" };
+      if (node.type === "orchestrator") return { tag: "ORCH", cls: "orchestrator", color: "#3b82f6" };
+      if (node.type === "data_store" || node.type === "api") {
+        return { tag: "INPUT", cls: "gateway", color: "#475569" };
+      }
+      if (node.type === "agent") {
+        const d = (node.reuse_decision || "build").toLowerCase();
+        if (d === "reuse") return { tag: "REUSE", cls: "reuse", color: "#16a34a" };
+        if (d === "adapt") return { tag: "ADAPT", cls: "adapt", color: "#0d9488" };
+        return { tag: "BUILD", cls: "build", color: "#2563eb" };
+      }
+      return { tag: "BUILD", cls: "build", color: "#64748b" };
+    }
+
+    function selectFlowNode(nodeId) {
+      window.dispatchEvent(
+        new CustomEvent("launchpad:select-node", { detail: { nodeId } })
+      );
+      document.querySelectorAll(".flow-order li").forEach((li) => {
+        li.classList.toggle("selected", li.dataset.nodeId === nodeId);
+      });
+    }
+
+    function mountArchitectureFlow(plan) {
+      const el = document.getElementById("architecture-flow-root");
+      if (!el || !window.LaunchpadArchitecture) return;
+      if (el.dataset.mounted === "1") {
+        window.LaunchpadArchitecture.update(plan);
+      } else {
+        window.LaunchpadArchitecture.mount(el, plan);
+        el.dataset.mounted = "1";
+      }
+    }
+
+    function displayNodeLabel(n) {
+      const t = (n.label || "").trim();
+      if (!t || /^empty$/i.test(t)) {
+        const cap = n.metadata && n.metadata.capability;
+        if (cap) return cap.replace(/_/g, " ");
+        return (n.id || "component").split("_").slice(-2).join(" ");
+      }
+      return t;
+    }
+
+    function buildFlowSequence(plan) {
+      const nodes = plan.nodes || [];
+      const edges = plan.edges || [];
+      const entry = nodes.filter((n) => n.type === "data_store" || n.type === "api");
+      const orch = nodes.filter((n) => n.type === "orchestrator");
+      const human = nodes.filter((n) => n.type === "human");
+      const agents = nodes.filter((n) => n.type === "agent");
+
+      const flowEdge = (e) => {
+        const t = (e.type || "").toLowerCase();
+        return t === "invokes" || t === "produces" || (e.label || "").toLowerCase() === "flow";
+      };
+
+      const orderedAgents = [];
+      const seen = new Set();
+      const walk = (nodeId) => {
+        if (!nodeId || seen.has(nodeId)) return;
+        seen.add(nodeId);
+        const node = nodes.find((n) => n.id === nodeId);
+        if (node && node.type === "agent") orderedAgents.push(node);
+        edges
+          .filter((e) => e.source === nodeId && flowEdge(e))
+          .forEach((e) => walk(e.target));
+      };
+
+      const orchId = orch[0]?.id;
+      if (orchId) walk(orchId);
+
+      const byPipeline = (a, b) => {
+        const ao = Number((a.metadata && a.metadata.pipeline_order) || a.layer || 0);
+        const bo = Number((b.metadata && b.metadata.pipeline_order) || b.layer || 0);
+        return ao - bo;
+      };
+      agents.sort(byPipeline).forEach((a) => {
+        if (!orderedAgents.some((x) => x.id === a.id)) orderedAgents.push(a);
+      });
+
+      return [...entry, ...orch, ...orderedAgents, ...human];
+    }
+
+    function pipelineEdges(_plan, seq) {
+      const order = seq.map((n) => n.id);
+      return order.slice(0, -1).map((id, i) => ({
+        source: id,
+        target: order[i + 1],
+      }));
+    }
+
+    function renderFlowOrder(plan) {
+      const seq = buildFlowSequence(plan);
+      const ol = document.getElementById("flow-order");
+      ol.innerHTML = "";
+      let reuse = 0, adapt = 0, build = 0;
+      seq.forEach((n, i) => {
+        const t = nodeTag(n);
+        if (t.tag === "REUSE") reuse++;
+        if (t.tag === "ADAPT") adapt++;
+        if (t.tag === "BUILD" && n.type === "agent") build++;
+        const li = document.createElement("li");
+        li.dataset.nodeId = n.id;
+        li.innerHTML = `
+          <span class="idx">${i + 1}</span>
+          <span class="swatch" style="background:${t.color}"></span>
+          <span class="name">${escapeHtml(displayNodeLabel(n))}</span>
+          <span class="tag" style="background:${t.color}22;color:${t.color}">${t.tag}</span>`;
+        li.onclick = () => selectFlowNode(n.id);
+        ol.appendChild(li);
+      });
+      const agentCount = seq.filter((n) => n.type === "agent").length;
+      const conn = Math.max(0, seq.length - 1);
+      document.getElementById("overview-stats").innerHTML = `
+        <strong>${agentCount}</strong> agents<br>
+        <strong>${conn}</strong> pipeline links<br>
+        <strong>${reuse}</strong> reuse · <strong>${adapt}</strong> adapt · <strong>${build}</strong> build`;
+      document.getElementById("center-subtitle").textContent =
+        `${seq.length} components · ${conn} connections`;
+    }
+
+
+    async function generatePlan() {
+      if (!sessionId) return;
+      const st = document.getElementById("plan-status");
+      st.textContent = "Generating architecture…";
+      try {
+        const r = await fetch(API + "/interview/" + sessionId + "/plan", { method: "POST" });
+        const { ok, data: d } = await parseJsonResponse(r);
+        if (!ok) throw new Error(d.detail || d.error || "Plan failed");
+        lastPlan = d;
+        renderFlowOrder(d);
+        addChatEntry({
+          role: "system",
+          kind: "event",
+          topic: "Architecture",
+          topicKey: "architecture",
+          who: "Launchpad",
+          text: "Your workflow diagram is ready",
+          subtext: `${(d.nodes || []).filter((n) => n.type === "agent").length} steps mapped`,
+        });
+        if (d.narrative) {
+          addChatEntry({
+            role: "assistant",
+            kind: "event",
+            topic: "Architecture",
+            topicKey: "architecture",
+            who: "Launchpad",
+            text: d.narrative.slice(0, 500) + (d.narrative.length > 500 ? "…" : ""),
+            subtext: "Summary",
+          });
+        }
+        mountArchitectureFlow(d);
+        st.textContent = "";
+      } catch (e) {
+        st.textContent = "Failed: " + e.message;
+      }
+    }
+
+    document.getElementById("btn-start-interview").onclick = async () => {
+      const problem = document.getElementById("problem").value.trim();
+      if (problem.length < 20) { alert("Enter a longer problem statement"); return; }
+      chatMessages = [];
+      addChatEntry({
+        role: "you",
+        kind: "you",
+        topic: "Problem statement",
+        topicKey: "problem",
+        who: "You",
+        text: problem,
+        subtext: "",
+      });
+      try {
+        const r = await fetch(API + "/interview/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ problem_statement: problem }),
+        });
+        const { ok, data: d } = await parseJsonResponse(r);
+        if (!ok) throw new Error(d.detail || d.error || "Start failed");
+        sessionId = d.session_id;
+        document.getElementById("session-id").value = sessionId;
+        updateSessionBar();
+        currentSpec = d.spec;
+        renderSpecification(d.spec);
+        updateSidebarFooter(d.spec, d.is_complete);
+        window._lastInterviewOptions = d.options || [];
+        recordInferredSlots(d.spec);
+        showQuestion(d);
+        recordLaunchpadQuestion(d);
+      } catch (e) {
+        addChatEntry({ role: "system", kind: "event", topic: "", topicKey: "setup", who: "Launchpad", text: "Something went wrong: " + e.message });
+      }
+    };
+
+    document.getElementById("btn-submit-answer").onclick = async () => {
+      const options = window._lastInterviewOptions || [];
+      const answer = getAnswerPayload(options);
+      if (!sessionId || !selectedOptionId) {
+        alert("Select an option or Other.");
+        return;
+      }
+      if (!answer) { alert("Provide an answer."); return; }
+      try {
+        const r = await fetch(API + "/interview/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, answer }),
+        });
+        const { ok, data: d } = await parseJsonResponse(r);
+        if (!ok) throw new Error(d.detail || d.error || "Submit failed");
+        currentSpec = d.spec;
+        renderSpecification(d.spec);
+        updateSidebarFooter(d.spec, d.is_complete);
+        const display = getAnswerDisplay(options);
+        const answeredLabel =
+          d.answered_slot_label || slotLabelFromSpec(d.spec, d.answered_slot);
+        addChatEntry({
+          role: "you",
+          kind: "answer",
+          topic: answeredLabel || "Your answer",
+          topicKey: d.answered_slot || "answer",
+          who: "You",
+          text: display.text || answer,
+          subtext: display.subtext || "",
+        });
+        recordSlotsUpdated(d.spec, d.slots_updated, d.completion_pct);
+        window._lastInterviewOptions = d.options || [];
+        showQuestion(d);
+        if (d.is_complete) {
+          addChatEntry({
+            role: "system",
+            kind: "event",
+            topic: "Interview complete",
+            topicKey: "specification",
+            who: "Launchpad",
+            text: "That's everything — review your answers, then open the diagram.",
+          });
+          setPhase("specification");
+        } else {
+          recordLaunchpadQuestion(d);
+        }
+      } catch (e) {
+        addChatEntry({ role: "system", kind: "event", topic: "", topicKey: "setup", who: "Launchpad", text: "Something went wrong: " + e.message });
+      }
+    };
+
+    document.getElementById("btn-force-complete").onclick = async () => {
+      if (!sessionId) return;
+      try {
+        const r = await fetch(API + "/interview/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            answer: "Proceed with best-effort specification.",
+            force_complete: true,
+          }),
+        });
+        const { ok, data: d } = await parseJsonResponse(r);
+        if (!ok) throw new Error(d.detail || d.error || "Failed");
+        currentSpec = d.spec;
+        renderSpecification(d.spec);
+        updateSidebarFooter(d.spec, true);
+        addChatEntry({
+          role: "system",
+          kind: "event",
+          topic: "Interview complete",
+          topicKey: "specification",
+          who: "Launchpad",
+          text: "That's everything — review your answers, then open the diagram.",
+        });
+        setPhase("specification");
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+
+    document.getElementById("btn-go-architecture").onclick = () => setPhase("architecture");
+
+    window.addEventListener("launchpad:flow-stats", (e) => {
+      const s = e.detail;
+      if (!s) return;
+      document.getElementById("overview-stats").innerHTML = `
+        <strong>${s.agents}</strong> agents<br>
+        <strong>${s.parallelBranches || 0}</strong> parallel branches<br>
+        <strong>${s.reuse}</strong> reuse · <strong>${s.adapt || 0}</strong> adapt · <strong>${s.build}</strong> build`;
+    });
+
+    document.getElementById("link-catalog").onclick = (e) => {
+      e.preventDefault();
+      document.getElementById("catalog-drawer").classList.add("open");
+    };
+    document.getElementById("btn-close-catalog").onclick = () => {
+      document.getElementById("catalog-drawer").classList.remove("open");
+    };
+    document.getElementById("btn-ingest").onclick = async () => {
+      const el = document.getElementById("ingest-status");
+      el.textContent = "Ingesting…";
+      const r = await fetch(API + "/ingest/catalog", { method: "POST" });
+      const { ok, data: d } = await parseJsonResponse(r);
+      el.textContent = ok ? `Indexed ${d.total_entities_indexed} entities` : (d.detail || "failed");
+    };
+    document.getElementById("btn-search").onclick = async () => {
+      const q = document.getElementById("query").value.trim();
+      const r = await fetch(API + "/search/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q, top_k: 6, mode: "hybrid" }),
+      });
+      const { data: d } = await parseJsonResponse(r);
+      const out = document.getElementById("search-results");
+      out.innerHTML = "";
+      (d.results || []).forEach((hit) => {
+        const p = document.createElement("p");
+        p.style.cssText = "font-size:0.8rem;margin-bottom:0.5rem;";
+        p.innerHTML = `<strong>${escapeHtml(hit.title)}</strong> · ${escapeHtml(hit.project_name || "")}`;
+        out.appendChild(p);
+      });
+    };
+  </script>
+  <link rel="stylesheet" href="/static/architecture/assets/index.css" />
+  <script type="module" src="/static/architecture/assets/index.js"></script>
+</body>
+</html>

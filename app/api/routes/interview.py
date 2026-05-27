@@ -1,9 +1,12 @@
 """Smart interview API — slot-filling spec completion."""
 
+import structlog
 from fastapi import APIRouter, HTTPException
 
 from app.api.dependencies import get_interview_service, get_planner_service
-from app.core.exceptions import KnowledgeBaseError
+from app.core.exceptions import ConfigurationError, ExtractionError, KnowledgeBaseError
+
+logger = structlog.get_logger(__name__)
 from app.schemas.architecture_graph import ArchitecturePlanRequest, ArchitecturePlanResponse
 from app.schemas.interview import (
     InterviewAnswerRequest,
@@ -27,6 +30,12 @@ async def start_interview(request: InterviewStartRequest) -> InterviewStartRespo
         return await get_interview_service().start(request.problem_statement)
     except KnowledgeBaseError as e:
         raise HTTPException(status_code=422, detail=e.message) from e
+    except Exception as e:
+        logger.exception("interview_start_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Interview could not start. Check Azure OpenAI settings or retry in a moment.",
+        ) from e
 
 
 @router.post("/answer", response_model=InterviewAnswerResponse)
@@ -36,10 +45,19 @@ async def answer_interview(request: InterviewAnswerRequest) -> InterviewAnswerRe
         return await get_interview_service().answer(
             request.session_id,
             request.answer,
+            option_id=request.option_id,
             force_complete=request.force_complete,
         )
     except KnowledgeBaseError as e:
         raise HTTPException(status_code=422, detail=e.message) from e
+    except (ConfigurationError, ExtractionError) as e:
+        raise HTTPException(status_code=503, detail=e.message) from e
+    except Exception as e:
+        logger.exception("interview_answer_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save your answer. Please try again.",
+        ) from e
 
 
 @router.get("/{session_id}", response_model=InterviewStatusResponse)

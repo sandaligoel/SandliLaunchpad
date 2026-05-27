@@ -8,6 +8,7 @@ export function OrchestratorNode({ data, selected }: NodeProps<Node<FlowNodeData
     <NodeShell
       className="border-accent/60 bg-gradient-to-br from-blue-950/90 via-indigo-900/80 to-blue-950/90 shadow-glass"
       active={data.isActive}
+      dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
     >
       <Handle type="target" position={Position.Left} className="!bg-blue-400 !w-2 !h-2" />

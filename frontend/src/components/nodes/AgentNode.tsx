@@ -13,7 +13,12 @@ const STYLES: Record<string, string> = {
 export function AgentNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
   const style = STYLES[data.kind] || STYLES["agent-build"];
   return (
-    <NodeShell className={`${style} shadow-glass`} active={data.isActive} highlighted={data.isHighlighted || selected}>
+    <NodeShell
+      className={`${style} shadow-glass`}
+      active={data.isActive}
+      dimmed={data.isDimmed}
+      highlighted={data.isHighlighted || selected}
+    >
       <Handle type="target" position={Position.Left} className="!w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!w-2 !h-2" />
       <div className="p-3">

@@ -35,10 +35,12 @@ export function useGraphViewport(
   const applyFit = useCallback(
     async (mode: FitMode = "full", selectionIds?: string[]) => {
       const focusNodes = nodesForFitMode(nodes, mode, selectionIds);
-      await fitView({
-        ...defaultFitViewOptions,
-        nodes: focusNodes,
-      });
+      const fitOpts: any = { ...defaultFitViewOptions };
+      // When focusNodes is undefined, "Fit all" should include the whole canvas.
+      if (focusNodes) {
+        fitOpts.nodes = focusNodes;
+      }
+      await fitView(fitOpts);
     },
     [fitView, nodes]
   );

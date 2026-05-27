@@ -33,6 +33,10 @@ class InterviewStartResponse(BaseModel):
 class InterviewAnswerRequest(BaseModel):
     session_id: str
     answer: str = Field(..., min_length=1, max_length=4000)
+    option_id: str | None = Field(
+        default=None,
+        description="When user picked a multiple-choice option, pass its id for a fast path (no LLM parse).",
+    )
     force_complete: bool = False
 
 

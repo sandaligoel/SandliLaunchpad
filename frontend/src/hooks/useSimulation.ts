@@ -45,11 +45,23 @@ function isLayoutNode(n: Node<FlowNodeData>): boolean {
   );
 }
 
+export interface SimulationState {
+  simulating: boolean;
+  stepIndex: number;
+  stepTotal: number;
+  currentStepLabel: string;
+  currentStepId: string | null;
+  progress: number;
+}
+
 export function useSimulation(plan: ArchitecturePlan | null) {
   const [nodes, setNodes] = useState<Node<FlowNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge<FlowEdgeData>[]>([]);
   const [simulating, setSimulating] = useState(false);
   const [stepIndex, setStepIndex] = useState(-1);
+  const [stepTotal, setStepTotal] = useState(0);
+  const [currentStepId, setCurrentStepId] = useState<string | null>(null);
+  const [currentStepLabel, setCurrentStepLabel] = useState("");
   const [layoutLoading, setLayoutLoading] = useState(false);
   const [layoutMeta, setLayoutMeta] = useState<LayoutMeta | null>(null);
   const orderRef = useRef<string[]>([]);
@@ -97,38 +109,53 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     };
   }, [plan, runLayout]);
 
-  const applyHighlight = useCallback((activeId: string | null) => {
+  const applyHighlight = useCallback((activeId: string | null, simActive: boolean) => {
+    const activeIdx = activeId ? orderRef.current.indexOf(activeId) : -1;
     setNodes((nds) =>
-      nds.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          isActive: n.id === activeId,
-          isHighlighted: false,
-          runtime: {
-            ...n.data.runtime,
-            status:
-              n.id === activeId
-                ? "running"
-                : orderRef.current.indexOf(n.id) >= 0 &&
-                    orderRef.current.indexOf(n.id) <
-                      orderRef.current.indexOf(activeId || "")
-                  ? "success"
-                  : "idle",
+      nds.map((n) => {
+        const idx = orderRef.current.indexOf(n.id);
+        const isActive = n.id === activeId;
+        const status =
+          !simActive || !isLayoutNode(n)
+            ? "idle"
+            : isActive
+              ? "running"
+              : idx >= 0 && activeIdx >= 0 && idx < activeIdx
+                ? "success"
+                : "idle";
+        const isDimmed = simActive && isLayoutNode(n) && status === "idle";
+        return {
+          ...n,
+          zIndex: isActive ? 20 : isDimmed ? 0 : 5,
+          data: {
+            ...n.data,
+            isActive,
+            isDimmed,
+            isHighlighted: false,
+            runtime: {
+              ...n.data.runtime,
+              status,
+            },
           },
-        },
-      }))
+        };
+      })
     );
     setEdges((eds) =>
-      eds.map((e) => ({
-        ...e,
-        data: {
-          edgeKind: e.data?.edgeKind ?? "sequential",
-          label: e.data?.label,
-          animated: e.data?.animated,
-          isActive: activeId ? e.source === activeId || e.target === activeId : false,
-        },
-      }))
+      eds.map((e) => {
+        const isOutgoing = activeId ? e.source === activeId : false;
+        const isIncoming = activeId ? e.target === activeId : false;
+        return {
+          ...e,
+          zIndex: isOutgoing || isIncoming ? 10 : 0,
+          data: {
+            edgeKind: e.data?.edgeKind ?? "sequential",
+            label: e.data?.label,
+            animated: e.data?.animated,
+            isActive: isOutgoing || isIncoming,
+            isFlowing: isOutgoing,
+          },
+        };
+      })
     );
   }, []);
 
@@ -136,21 +163,31 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     if (timerRef.current) clearTimeout(timerRef.current);
     setSimulating(false);
     setStepIndex(-1);
-    applyHighlight(null);
+    setCurrentStepId(null);
+    setCurrentStepLabel("");
+    applyHighlight(null, false);
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
-        data: { ...n.data, isActive: false, runtime: { ...n.data.runtime, status: "idle" } },
+        zIndex: undefined,
+        data: {
+          ...n.data,
+          isActive: false,
+          isDimmed: false,
+          runtime: { ...n.data.runtime, status: "idle" },
+        },
       }))
     );
     setEdges((eds) =>
       eds.map((e) => ({
         ...e,
+        zIndex: undefined,
         data: {
           edgeKind: e.data?.edgeKind ?? "sequential",
           label: e.data?.label,
           animated: e.data?.animated,
           isActive: false,
+          isFlowing: false,
         },
       }))
     );
@@ -163,24 +200,48 @@ export function useSimulation(plan: ArchitecturePlan | null) {
       return n && isLayoutNode(n);
     });
     if (!order.length) return;
+    setStepTotal(order.length);
     setSimulating(true);
     let i = 0;
     const tick = () => {
       if (i >= order.length) {
         setSimulating(false);
-        applyHighlight(null);
+        setStepIndex(order.length);
+        setCurrentStepId(null);
+        setCurrentStepLabel("Complete");
+        applyHighlight(null, false);
         setNodes((nds) =>
           nds.map((n) => ({
             ...n,
-            data: { ...n.data, runtime: { ...n.data.runtime, status: "success" }, isActive: false },
+            data: {
+              ...n.data,
+              isDimmed: false,
+              runtime: { ...n.data.runtime, status: "success" },
+              isActive: false,
+            },
           }))
+        );
+        window.dispatchEvent(
+          new CustomEvent("launchpad:simulation-step", {
+            detail: { stepIndex: order.length, stepTotal: order.length, nodeId: null, label: "Complete" },
+          })
         );
         return;
       }
+      const stepId = order[i];
+      const stepNode = nodes.find((x) => x.id === stepId);
+      const label = stepNode?.data.label ?? stepId;
       setStepIndex(i);
-      applyHighlight(order[i]);
+      setCurrentStepId(stepId);
+      setCurrentStepLabel(label);
+      applyHighlight(stepId, true);
+      window.dispatchEvent(
+        new CustomEvent("launchpad:simulation-step", {
+          detail: { stepIndex: i, stepTotal: order.length, nodeId: stepId, label },
+        })
+      );
       i += 1;
-      timerRef.current = setTimeout(tick, 900);
+      timerRef.current = setTimeout(tick, 1100);
     };
     tick();
   }, [applyHighlight, nodes, stop]);
@@ -261,6 +322,18 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     });
   }, [plan, nodes.length]);
 
+  const progress =
+    stepTotal > 0 ? Math.min(1, (stepIndex + (simulating ? 0.35 : 0)) / stepTotal) : 0;
+
+  const simulationState: SimulationState = {
+    simulating,
+    stepIndex,
+    stepTotal,
+    currentStepLabel,
+    currentStepId,
+    progress,
+  };
+
   return {
     nodes,
     edges,
@@ -268,6 +341,10 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     onEdgesChange,
     simulating,
     stepIndex,
+    stepTotal,
+    currentStepId,
+    currentStepLabel,
+    simulationState,
     layoutLoading,
     layoutMeta,
     run,

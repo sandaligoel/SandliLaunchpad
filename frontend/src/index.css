@@ -24,7 +24,13 @@ body,
 }
 
 .animate-flow-dash {
-  animation: flow-dash 1.2s linear infinite;
+  animation: flow-dash 0.85s linear infinite;
+}
+
+/* Simulation mode — subtle canvas tint */
+.launchpad-flow-simulating .launchpad-react-flow {
+  background: radial-gradient(ellipse at 50% 0%, rgba(30, 58, 138, 0.12), transparent 55%),
+    #0a0e14 !important;
 }
 
 /* React Flow canvas — full panel, pan/zoom (no CSS scale compression) */
@@ -71,4 +77,44 @@ body,
 
 .launchpad-flow-controls button:hover {
   background: rgba(59, 130, 246, 0.12) !important;
+}
+
+/* Architecture full-screen (Fit all) — hide app chrome outside React */
+body.launchpad-arch-fullscreen {
+  overflow: hidden;
+}
+
+body.launchpad-arch-fullscreen header.app-header,
+body.launchpad-arch-fullscreen aside.sidebar-nav,
+body.launchpad-arch-fullscreen aside.sidebar-left,
+body.launchpad-arch-fullscreen .center-header,
+body.launchpad-arch-fullscreen #plan-status {
+  display: none !important;
+}
+
+body.launchpad-arch-fullscreen #workspace {
+  display: block !important;
+  grid-template-columns: none !important;
+}
+
+body.launchpad-arch-fullscreen main.center-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+}
+
+body.launchpad-arch-fullscreen .center-body {
+  padding: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+body.launchpad-arch-fullscreen .arch-flow-host {
+  border: none !important;
+  border-radius: 0 !important;
+  height: 100% !important;
+  min-height: 100% !important;
 }

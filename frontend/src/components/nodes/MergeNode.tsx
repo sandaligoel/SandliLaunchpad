@@ -12,6 +12,7 @@ export function MergeNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
           : "border-purple-500/50 bg-gradient-to-br from-purple-950/80 to-slate-900/90"
       }`}
       active={data.isActive}
+      dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
     >
       <Handle type="target" position={Position.Left} className="!w-2 !h-2" />

@@ -37,6 +37,7 @@ export function AnimatedEdge({
   const kind = data?.edgeKind ?? "sequential";
   const stroke = STROKE[kind];
   const active = data?.isActive;
+  const flowing = data?.isFlowing;
 
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -51,22 +52,38 @@ export function AnimatedEdge({
 
   return (
     <>
+      {active && (
+        <path
+          d={path}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={8}
+          strokeOpacity={0.25}
+          style={{ pointerEvents: "none", filter: "blur(4px)" }}
+        />
+      )}
       <BaseEdge
         id={id}
         path={path}
         style={{
           stroke,
-          strokeWidth: active ? 3 : 2,
-          opacity: active ? 1 : 0.7,
+          strokeWidth: active ? 3.5 : 2,
+          opacity: active ? 1 : 0.55,
         }}
       />
       <path
         d={path}
         fill="none"
-        stroke={stroke}
-        strokeWidth={active ? 2.5 : 1.5}
-        strokeDasharray={kind === "parallel" ? "10 7" : kind === "retry" ? "5 5" : "none"}
-        className={active ? "animate-flow-dash opacity-90" : "opacity-30"}
+        stroke={flowing ? "#7dd3fc" : stroke}
+        strokeWidth={flowing ? 3 : active ? 2.5 : 1.5}
+        strokeDasharray={kind === "parallel" ? "10 7" : kind === "retry" ? "5 5" : flowing ? "6 10" : "none"}
+        className={
+          flowing
+            ? "animate-flow-dash opacity-100"
+            : active
+              ? "animate-flow-dash opacity-80"
+              : "opacity-25"
+        }
         style={{ pointerEvents: "none" }}
       />
       {(label || data?.label) && (
@@ -77,7 +94,11 @@ export function AnimatedEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: "all",
             }}
-            className="rounded bg-panel/95 px-1.5 py-0.5 text-[9px] font-medium text-slate-400 border border-border shadow-sm"
+            className={`rounded border px-1.5 py-0.5 text-[9px] font-medium shadow-sm ${
+              active
+                ? "border-blue-500/50 bg-blue-950/95 text-blue-200"
+                : "border-border bg-panel/95 text-slate-400"
+            }`}
           >
             {String(label || data?.label)}
           </div>

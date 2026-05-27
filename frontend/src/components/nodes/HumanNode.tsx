@@ -7,6 +7,7 @@ export function HumanNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
     <NodeShell
       className="border-hitl/60 bg-gradient-to-br from-orange-950/85 to-slate-900/90 shadow-glass"
       active={data.isActive}
+      dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
     >
       <Handle type="target" position={Position.Left} className="!bg-orange-400 !w-2 !h-2" />

@@ -7,6 +7,7 @@ export function InputNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
     <NodeShell
       className="border-input/50 bg-gradient-to-br from-slate-800/90 to-slate-900/95 shadow-glass"
       active={data.isActive}
+      dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
     >
       <Handle type="source" position={Position.Right} className="!bg-slate-400 !w-2 !h-2" />

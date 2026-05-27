@@ -99,6 +99,7 @@ export interface FlowNodeData extends Record<string, unknown> {
   expanded?: boolean;
   pipelineOrder?: number;
   isActive?: boolean;
+  isDimmed?: boolean;
   isHighlighted?: boolean;
   branchLabel?: string;
   capabilityId?: string;
@@ -111,4 +112,5 @@ export interface FlowEdgeData extends Record<string, unknown> {
   label?: string;
   animated?: boolean;
   isActive?: boolean;
+  isFlowing?: boolean;
 }

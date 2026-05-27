@@ -6,68 +6,218 @@
   <title>Affine Agent Launchpad</title>
   <style>
     :root {
-      --bg: #0c1117; --surface: #151b24; --surface2: #1a222d; --border: #2a3544;
-      --text: #e8edf4; --muted: #8b9cb3; --accent: #3b82f6; --accent-dim: #1e3a5f;
-      --success: #22c55e; --reuse: #16a34a; --adapt: #0d9488; --build: #2563eb;
+      /* Light UI (matching reference screenshot) */
+      --bg: #f7f8fb;
+      --surface: #ffffff;
+      --surface2: #f2f4f8;
+      --border: #e6eaf2;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-dim: rgba(37, 99, 235, 0.12);
+      --success: #16a34a;
+
+      /* Diagram colors (kept) */
+      --reuse: #16a34a; --adapt: #0d9488; --build: #2563eb;
       --gateway: #334155; --hitl: #ea580c;
+
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+      --radius: 12px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Inter", system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
 
+    /* Top toolbar */
     header.app-header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface);
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
       flex-shrink: 0;
     }
-    .brand { font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; }
-    .brand span { color: var(--muted); font-weight: 400; font-size: 0.85rem; margin-left: 0.5rem; }
+    .top-left {
+      display: flex; align-items: center; gap: 0.75rem; min-width: 280px;
+    }
+    .brand {
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+    .brand .sub { color: var(--muted); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.08em; }
+    .project-title {
+      font-size: 0.85rem; font-weight: 600; color: var(--text);
+      max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .top-meta {
+      display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.72rem;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.18rem 0.5rem; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-weight: 600;
+    }
+    .pill.green { background: rgba(22,163,74,0.10); border-color: rgba(22,163,74,0.25); color: #166534; }
+    .top-actions { display: flex; align-items: center; gap: 0.5rem; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.78rem;
+      padding: 0.42rem 0.7rem;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn:hover { border-color: rgba(37,99,235,0.35); background: rgba(37,99,235,0.03); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(37,99,235,0.20);
+    }
+    .btn.primary:hover { filter: brightness(1.03); }
+    .btn.warn { background: #f59e0b; border-color: #f59e0b; color: #111827; }
+    .btn.warn:hover { filter: brightness(1.03); }
+    .btn:disabled { opacity: 0.55; cursor: wait; box-shadow: none; }
+
+    /* Stepper (kept behavior; restyled for light toolbar) */
     .stepper { display: flex; gap: 0.35rem; align-items: center; }
     .step {
-      display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.85rem;
-      border-radius: 6px; border: 1px solid transparent; color: var(--muted);
-      font-size: 0.8rem; cursor: pointer; background: transparent;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.38rem 0.7rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
     }
-    .step .num { width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: center; font-size: 0.7rem; }
-    .step.active { color: var(--text); border-color: var(--accent); background: rgba(59,130,246,0.12); }
-    .step.active .num { background: var(--accent); border-color: var(--accent); color: white; }
-    .step.done .num { background: var(--success); border-color: var(--success); color: white; }
-    .header-links a { color: var(--muted); font-size: 0.75rem; margin-left: 1rem; text-decoration: none; }
-    .header-links a:hover { color: var(--accent); }
+    .step .num {
+      width: 1.15rem; height: 1.15rem; border-radius: 50%;
+      border: 1px solid var(--border);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.68rem; font-weight: 900; color: var(--muted);
+      background: var(--surface2);
+    }
+    .step:hover { border-color: rgba(37,99,235,0.25); background: rgba(37,99,235,0.03); }
+    .step.active { color: #1d4ed8; border-color: rgba(37,99,235,0.35); background: rgba(37,99,235,0.06); }
+    .step.active .num { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .step.done .num { background: var(--success); border-color: var(--success); color: #fff; }
 
+    /* App grid like screenshot: nav | library | canvas | inspector */
     .workspace {
-      flex: 1; display: grid;
-      grid-template-columns: 280px 1fr 260px;
-      min-height: 0; min-width: 0; overflow: hidden;
+      flex: 1;
+      display: grid;
+      grid-template-columns: 220px 280px 1fr;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+      transition: grid-template-columns 180ms ease;
     }
-    .workspace.no-right { grid-template-columns: 280px 1fr; }
+    .workspace.no-right { grid-template-columns: 220px 280px 1fr; }
+    .workspace.chat-hidden {
+      grid-template-columns: 220px 1fr;
+    }
+    .workspace.chat-hidden aside.sidebar-left { display: none; }
 
-    aside.sidebar-left {
-      border-right: 1px solid var(--border); background: var(--surface);
-      display: flex; flex-direction: column; min-height: 0;
+    /* Left navigation rail */
+    aside.sidebar-nav {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0.85rem 0.8rem;
+      gap: 0.65rem;
     }
-    .sidebar-title {
-      padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--muted); border-bottom: 1px solid var(--border);
-    }
-    .session-bar {
-      padding: 0.5rem 1rem; font-size: 0.75rem; color: var(--muted);
+    .nav-head {
+      display: flex; flex-direction: column; gap: 0.2rem;
+      padding: 0.2rem 0.2rem 0.75rem;
       border-bottom: 1px solid var(--border);
     }
-    .chat-scroll { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-    .chat-bubble {
-      padding: 0.75rem 0.9rem; border-radius: 10px; font-size: 0.82rem; line-height: 1.5;
-      max-width: 100%;
+    .nav-head .t1 { font-size: 0.9rem; font-weight: 800; letter-spacing: -0.02em; }
+    .nav-head .t2 { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.12em; color: var(--muted); }
+    .nav-group { margin-top: 0.65rem; display: flex; flex-direction: column; gap: 0.2rem; }
+    .nav-item {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.55rem 0.6rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      color: var(--text);
+      cursor: pointer;
+      border: 1px solid transparent;
     }
-    .chat-bubble.you { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.35); align-self: stretch; }
-    .chat-bubble.you .who { font-size: 0.65rem; font-weight: 700; color: var(--accent); margin-bottom: 0.35rem; }
-    .chat-bubble.system { background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 0.78rem; }
-    .chat-bubble.answer { background: var(--surface2); border: 1px solid var(--border); }
-    .chat-bubble.answer .who { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.25rem; }
-    .chat-bubble.question { background: var(--surface2); border: 1px solid rgba(59,130,246,0.35); }
-    .chat-bubble.question .who { font-size: 0.65rem; font-weight: 700; color: var(--accent); margin-bottom: 0.35rem; }
-    .chat-bubble.event { background: var(--bg); border: 1px dashed var(--border); color: var(--muted); font-size: 0.76rem; }
-    .chat-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; line-height: 1.35; }
+    .nav-item:hover { background: rgba(15,23,42,0.03); border-color: rgba(15,23,42,0.06); }
+    .nav-item.active { background: rgba(37,99,235,0.08); border-color: rgba(37,99,235,0.22); color: #1d4ed8; font-weight: 700; }
+    .nav-ico { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+
+    /* Middle library column (we reuse it for the chat + session info) */
+    aside.sidebar-left {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .sidebar-title {
+      padding: 0.85rem 0.9rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 800;
+    }
+    .session-bar {
+      padding: 0.55rem 0.9rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.85rem 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+    }
+    .chat-bubble {
+      padding: 0.65rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 1px rgba(15,23,42,0.03);
+    }
+    .chat-bubble.you { background: rgba(37,99,235,0.06); border-color: rgba(37,99,235,0.18); }
+    .chat-bubble.you .who { font-size: 0.66rem; font-weight: 800; color: #1d4ed8; margin-bottom: 0.35rem; }
+    .chat-bubble.system { background: var(--surface2); color: var(--muted); }
+    .chat-bubble.answer { background: #ffffff; }
+    .chat-bubble.answer .who { font-size: 0.66rem; color: var(--muted); margin-bottom: 0.25rem; font-weight: 700; }
+    .chat-bubble.question { background: rgba(15,23,42,0.02); border-color: rgba(37,99,235,0.18); }
+    .chat-bubble.question .who { font-size: 0.66rem; font-weight: 800; color: #1d4ed8; margin-bottom: 0.35rem; }
+    .chat-bubble.event { background: #ffffff; border-style: dashed; color: var(--muted); font-size: 0.76rem; }
+    .chat-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.35; }
     .chat-topic-section {
       display: flex; align-items: center; gap: 0.5rem; margin: 0.35rem 0 0.15rem;
       padding-top: 0.5rem;
@@ -98,16 +248,26 @@
     }
 
     main.center-panel {
-      display: flex; flex-direction: column; min-height: 0; min-width: 0;
-      background: var(--bg); flex: 1; overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      background: var(--bg);
+      overflow: hidden;
     }
     .center-header {
-      padding: 1rem 1.25rem 0.5rem; border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1rem 0.55rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
     }
-    .center-header h2 { font-size: 1rem; font-weight: 600; }
-    .center-header p { font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
-    .center-body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem 1.5rem; min-height: 0; }
-    .center-body.arch-phase { overflow: hidden; padding: 0.5rem 1rem 0.75rem; display: flex; flex-direction: column; }
+    .center-header h2 { font-size: 0.95rem; font-weight: 800; letter-spacing: -0.02em; }
+    .center-header p { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+    .center-body { flex: 1; overflow-y: auto; padding: 0.9rem 1rem 1rem; min-height: 0; }
+    .center-body.arch-phase { overflow: hidden; padding: 0.55rem; display: flex; flex-direction: column; }
 
     .phase { display: none; }
     .phase.active { display: block; }
@@ -119,43 +279,118 @@
       flex: 1; min-height: 0; min-width: 0; width: 100%; height: 100%;
       display: flex; flex-direction: column;
       background: #060a10;
-      border-radius: 10px;
+      border-radius: var(--radius);
       border: 1px solid var(--border);
       overflow: hidden;
       position: relative;
+      box-shadow: var(--shadow);
     }
     .arch-flow-host > * {
       flex: 1; min-height: 0; min-width: 0;
     }
 
+    body.launchpad-arch-fullscreen { overflow: hidden; }
+    body.launchpad-arch-fullscreen header.app-header,
+    body.launchpad-arch-fullscreen aside.sidebar-nav,
+    body.launchpad-arch-fullscreen aside.sidebar-left,
+    body.launchpad-arch-fullscreen .center-header,
+    body.launchpad-arch-fullscreen #plan-status { display: none !important; }
+    body.launchpad-arch-fullscreen #workspace {
+      display: block !important;
+      grid-template-columns: none !important;
+    }
+    body.launchpad-arch-fullscreen main.center-panel {
+      position: fixed; inset: 0; z-index: 400;
+      max-width: none; border: none; border-radius: 0;
+    }
+    body.launchpad-arch-fullscreen .center-body {
+      padding: 0 !important; height: 100% !important; overflow: hidden !important;
+    }
+    body.launchpad-arch-fullscreen .arch-flow-host {
+      border: none !important; border-radius: 0 !important;
+      height: 100% !important; min-height: 100% !important;
+    }
+
     textarea, input[type="text"] {
-      width: 100%; background: var(--surface); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 0.65rem 0.85rem; font-size: 0.85rem;
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.7rem 0.85rem;
+      font-size: 0.85rem;
+      box-shadow: inset 0 1px 0 rgba(15,23,42,0.02);
     }
     textarea { min-height: 88px; resize: vertical; line-height: 1.45; }
     button.primary {
-      background: var(--accent); color: white; border: none; border-radius: 8px;
-      padding: 0.55rem 1rem; cursor: pointer; font-size: 0.85rem; margin-top: 0.75rem;
+      background: var(--accent);
+      color: white;
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 0.6rem 0.95rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-top: 0.75rem;
+      box-shadow: 0 10px 20px rgba(37,99,235,0.18);
     }
-    button.primary:hover { filter: brightness(1.1); }
+    button.primary:hover { filter: brightness(1.03); }
+    button.primary:disabled, button.secondary:disabled {
+      opacity: 0.55; cursor: wait; filter: none;
+    }
+    .interview-loading {
+      display: none; align-items: center; gap: 0.5rem;
+      font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem;
+    }
+    .interview-loading.visible { display: flex; }
+    .interview-loading .dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+      animation: interview-pulse 1s ease-in-out infinite;
+    }
+    .interview-loading .dot:nth-child(2) { animation-delay: 0.15s; }
+    .interview-loading .dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes interview-pulse {
+      0%, 100% { opacity: 0.35; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1); }
+    }
     button.secondary {
-      background: transparent; border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: 0.55rem 1rem; cursor: pointer; font-size: 0.85rem; margin-top: 0.5rem; margin-left: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.6rem 0.95rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-top: 0.5rem;
+      margin-left: 0.5rem;
+      box-shadow: var(--shadow-sm);
     }
+    button.secondary:hover { border-color: rgba(15,23,42,0.16); }
 
     .question-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-      padding: 1rem 1.1rem; margin-bottom: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
     }
-    .question-card .q-topic { font-size: 0.72rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+    .question-card .q-topic { font-size: 0.72rem; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.10em; margin-bottom: 0.5rem; font-weight: 800; }
     .question-card .q-text { font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.75rem; }
     .option-list { display: flex; flex-direction: column; gap: 0.45rem; }
     .option-item {
       display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.6rem;
-      padding: 0.7rem 0.85rem; border-radius: 8px; border: 1px solid var(--border);
-      background: var(--bg); cursor: pointer; text-align: left;
+      padding: 0.7rem 0.85rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      cursor: pointer;
+      text-align: left;
+      box-shadow: 0 1px 1px rgba(15,23,42,0.03);
     }
-    .option-item:hover, .option-item.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+    .option-item:hover, .option-item.selected { border-color: rgba(37,99,235,0.45); background: rgba(37,99,235,0.04); }
     .option-item input[type="radio"] { width: 1rem; height: 1rem; margin-top: 0.15rem; accent-color: var(--accent); }
     .option-item .opt-label { font-size: 0.85rem; font-weight: 600; flex: 1; }
     .option-item .opt-hint { flex: 1 1 100%; margin-left: 1.6rem; font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
@@ -166,8 +401,9 @@
     .spec-row {
       display: grid; grid-template-columns: 140px 1fr auto;
       gap: 0.75rem; align-items: start; padding: 0.65rem 0.85rem;
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       font-size: 0.82rem;
+      box-shadow: 0 1px 1px rgba(15,23,42,0.03);
     }
     .spec-row .spec-key { color: var(--muted); font-weight: 500; }
     .spec-row .spec-val { line-height: 1.4; }
@@ -269,11 +505,15 @@
     #plan-status { flex-shrink: 0; padding-top: 0.35rem; font-size: 0.78rem; }
 
     aside.sidebar-right {
-      border-left: 1px solid var(--border); background: var(--surface);
-      display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow-y: auto;
     }
     .panel-block { padding: 1rem; border-bottom: 1px solid var(--border); }
-    .panel-block h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.65rem; }
+    .panel-block h3 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 0.65rem; font-weight: 900; }
     .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; margin-bottom: 0.4rem; color: var(--muted); }
     .legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
     .overview-stats { font-size: 0.85rem; line-height: 1.6; }
@@ -288,11 +528,12 @@
     .flow-order .name { flex: 1; line-height: 1.3; }
     .flow-order .tag { font-size: 0.62rem; padding: 0.1rem 0.35rem; border-radius: 3px; font-weight: 600; }
 
-    .catalog-drawer { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
+    .catalog-drawer { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 100; }
     .catalog-drawer.open { display: flex; align-items: center; justify-content: center; }
     .catalog-modal {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
       width: min(520px, 90vw); max-height: 80vh; overflow-y: auto; padding: 1.25rem;
+      box-shadow: var(--shadow);
     }
     .progress-thin { height: 3px; background: var(--border); border-radius: 2px; margin: 0.5rem 0; overflow: hidden; }
     .progress-thin .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
@@ -300,21 +541,53 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="brand">Affine Agent Launchpad</div>
-    <nav class="stepper" id="stepper">
-      <button type="button" class="step active" data-phase="interview"><span class="num">1</span> Interview</button>
-      <button type="button" class="step" data-phase="specification"><span class="num">2</span> Specification</button>
-      <button type="button" class="step" data-phase="architecture"><span class="num">3</span> Architecture</button>
-    </nav>
-    <div class="header-links">
-      <a href="#" id="link-catalog">Catalog</a>
-      <a href="/docs" target="_blank">API</a>
+    <div class="top-left">
+      <div class="brand">
+        <span>Affine Analytics</span>
+        <span class="sub">AGENTFORGE</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.9rem;min-width:0;flex:1;">
+      <div style="min-width:0;">
+        <div class="project-title" id="project-title">Launchpad workflow</div>
+        <div class="top-meta">
+          <span class="pill" id="project-version">v1.4</span>
+          <span class="pill green" id="project-saved">Saved</span>
+          <span class="pill" id="project-stats">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn" id="btn-top-interview">Interview</button>
+      <button type="button" class="btn" id="btn-top-reset">Reset</button>
+      <button type="button" class="btn" id="btn-top-validate">Validate</button>
+      <button type="button" class="btn" id="btn-top-test">Run Test</button>
+      <button type="button" class="btn" id="link-catalog">Catalog</button>
+      <a class="btn" href="/docs" target="_blank" style="text-decoration:none;">API</a>
+      <button type="button" class="btn primary" id="btn-top-save">Save</button>
+      <button type="button" class="btn warn" id="btn-top-deploy">Deploy</button>
     </div>
   </header>
 
   <div class="workspace no-right" id="workspace">
+    <aside class="sidebar-nav">
+      <div class="nav-head">
+        <div class="t1">Affine Analytics</div>
+        <div class="t2">AGENTFORGE v1.0</div>
+      </div>
+      <div class="nav-group">
+        <div class="nav-item"><span class="nav-ico">▦</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-ico">⌁</span> Agent Launchpad</div>
+        <div class="nav-item active" id="nav-workflow"><span class="nav-ico">▣</span> Workflow Builder</div>
+        <div class="nav-item"><span class="nav-ico">⟲</span> Workflows</div>
+        <div class="nav-item"><span class="nav-ico">▤</span> Templates</div>
+        <div class="nav-item"><span class="nav-ico">▥</span> Agent Library</div>
+      </div>
+    </aside>
+
+    <!-- Library column: we keep the same chat experience, just in a new shell -->
     <aside class="sidebar-left">
-      <div class="sidebar-title">Interview</div>
+      <div class="sidebar-title" id="left-col-title">Interview</div>
       <div class="session-bar" id="session-bar">Session — not started</div>
       <div class="chat-scroll" id="chat-scroll"></div>
       <div class="sidebar-footer" id="sidebar-footer"></div>
@@ -322,8 +595,25 @@
 
     <main class="center-panel">
       <div class="center-header" id="center-header">
-        <h2 id="center-title">Interview</h2>
-        <p id="center-subtitle">Tell us what you're trying to solve in everyday language.</p>
+        <div>
+          <h2 id="center-title">Interview</h2>
+          <p id="center-subtitle">Tell us what you're trying to solve in everyday language.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;min-width:0;">
+          <nav class="stepper" id="stepper" style="display:flex;gap:0.35rem;align-items:center;">
+            <button type="button" class="step active" data-phase="interview"><span class="num">1</span> Interview</button>
+            <button type="button" class="step" data-phase="specification"><span class="num">2</span> Specification</button>
+            <button type="button" class="step" data-phase="architecture"><span class="num">3</span> Architecture</button>
+          </nav>
+          <button
+            type="button"
+            class="btn"
+            id="btn-toggle-chat"
+            style="display:none; font-size:0.75rem; padding:0.35rem 0.6rem;"
+          >
+            Show chat
+          </button>
+        </div>
       </div>
       <div class="center-body">
         <!-- Phase 1: Interview -->
@@ -332,6 +622,10 @@
             <label class="sidebar-title" style="display:block;padding:0;margin-bottom:0.5rem;">Your problem</label>
             <textarea id="problem" placeholder="e.g. We are a health supplements brand on Amazon. We generate product images from reference photos but fail marketplace compliance because infographic text makes unsubstantiated health claims."></textarea>
             <button type="button" class="primary" id="btn-start-interview">Start interview</button>
+            <div class="interview-loading" id="interview-loading" aria-live="polite">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span id="interview-loading-text">Starting interview…</span>
+            </div>
           </div>
           <div id="question-block" style="display:none">
             <div class="question-card">
@@ -364,24 +658,6 @@
       </div>
     </main>
 
-    <aside class="sidebar-right" id="sidebar-right" style="display:none">
-      <div class="panel-block">
-        <h3>Legend</h3>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--reuse)"></span> Reuse catalog agent</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--adapt)"></span> Adapt existing agent</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--build)"></span> Build new component</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--hitl)"></span> Human / HITL step</div>
-        <div class="legend-item"><span class="legend-swatch" style="background:var(--gateway)"></span> Entry / routing</div>
-      </div>
-      <div class="panel-block">
-        <h3>Overview</h3>
-        <div class="overview-stats" id="overview-stats">—</div>
-      </div>
-      <div class="panel-block">
-        <h3>Flow order</h3>
-        <ol class="flow-order" id="flow-order"></ol>
-      </div>
-    </aside>
   </div>
 
   <div class="catalog-drawer" id="catalog-drawer">
@@ -411,8 +687,34 @@
     const PHASE_META = {
       interview: { title: "Interview", subtitle: "A short Q&A to capture how your workflow should work." },
       specification: { title: "Your answers", subtitle: "Review what we captured before building the diagram." },
-      architecture: { title: "Workflow diagram", subtitle: "A visual map of your steps and how they connect." },
+      architecture: { title: "Workflow diagram", subtitle: "" },
     };
+
+    // Top toolbar (visual only; keep backend unchanged)
+    (function bindTopToolbar() {
+      const bInterview = document.getElementById("btn-top-interview");
+      const bReset = document.getElementById("btn-top-reset");
+      const bValidate = document.getElementById("btn-top-validate");
+      const bTest = document.getElementById("btn-top-test");
+      const bSave = document.getElementById("btn-top-save");
+      const bDeploy = document.getElementById("btn-top-deploy");
+
+      if (bInterview) bInterview.onclick = () => setPhase("interview");
+      if (bReset) bReset.onclick = () => window.location.reload();
+      if (bValidate) bValidate.onclick = () => alert("Looks good so far. (Validation UI placeholder)");
+      if (bTest) bTest.onclick = () => alert("Run Test (UI placeholder). Use simulation in the diagram panel.");
+      if (bSave) bSave.onclick = () => alert("Saved (UI placeholder).");
+      if (bDeploy) bDeploy.onclick = () => alert("Deploy (UI placeholder).");
+
+      window.addEventListener("launchpad:flow-stats", (e) => {
+        const d = e.detail || {};
+        const el = document.getElementById("project-stats");
+        if (!el) return;
+        if (typeof d.agents === "number") {
+          el.textContent = `${d.agents} agents · ${d.parallelBranches ?? 0} branches`;
+        }
+      });
+    })();
 
     function escapeHtml(s) {
       const d = document.createElement("div");
@@ -435,20 +737,41 @@
       document.querySelectorAll(".phase").forEach((el) => el.classList.remove("active"));
       document.getElementById("phase-" + phase).classList.add("active");
       const ws = document.getElementById("workspace");
-      const sr = document.getElementById("sidebar-right");
       if (phase === "architecture") {
-        ws.classList.remove("no-right");
-        sr.style.display = "flex";
+        ws.classList.add("chat-hidden");
       } else {
-        ws.classList.add("no-right");
-        sr.style.display = "none";
+        ws.classList.remove("chat-hidden");
+      }
+      const toggleChatBtn = document.getElementById("btn-toggle-chat");
+      if (toggleChatBtn) {
+        toggleChatBtn.style.display = phase === "architecture" ? "inline-flex" : "none";
+        toggleChatBtn.textContent = ws.classList.contains("chat-hidden") ? "Show chat" : "Hide chat";
       }
       document.getElementById("center-title").textContent = PHASE_META[phase].title;
       document.getElementById("center-subtitle").textContent = PHASE_META[phase].subtitle;
+      const leftTitle = document.getElementById("left-col-title");
+      if (leftTitle) leftTitle.textContent = phase === "architecture" ? "Chat" : "Interview";
       if (phase === "architecture") {
         if (sessionId && !lastPlan) generatePlan();
         else if (lastPlan) mountArchitectureFlow(lastPlan);
       }
+    }
+
+    function toggleChatPanel() {
+      const ws = document.getElementById("workspace");
+      if (!ws) return;
+      ws.classList.toggle("chat-hidden");
+      const toggleChatBtn = document.getElementById("btn-toggle-chat");
+      if (toggleChatBtn) {
+        toggleChatBtn.textContent = ws.classList.contains("chat-hidden") ? "Show chat" : "Hide chat";
+      }
+      // Trigger ReactFlow to re-fit since the container width changed.
+      window.dispatchEvent(new Event("resize"));
+    }
+
+    const toggleChatBtnInitial = document.getElementById("btn-toggle-chat");
+    if (toggleChatBtnInitial) {
+      toggleChatBtnInitial.onclick = () => toggleChatPanel();
     }
 
     document.querySelectorAll(".step").forEach((btn) => {
@@ -673,6 +996,17 @@
       return m ? m.value : "";
     }
 
+    function setInterviewBusy(busy, message) {
+      const startBtn = document.getElementById("btn-start-interview");
+      const submitBtn = document.getElementById("btn-submit-answer");
+      const loading = document.getElementById("interview-loading");
+      const loadingText = document.getElementById("interview-loading-text");
+      if (startBtn) startBtn.disabled = busy;
+      if (submitBtn) submitBtn.disabled = busy;
+      if (loading) loading.classList.toggle("visible", busy);
+      if (loadingText && message) loadingText.textContent = message;
+    }
+
     function showQuestion(data) {
       const qBlock = document.getElementById("question-block");
       if (data.is_complete || !data.question) {
@@ -804,6 +1138,7 @@
     function renderFlowOrder(plan) {
       const seq = buildFlowSequence(plan);
       const ol = document.getElementById("flow-order");
+      if (!ol) return;
       ol.innerHTML = "";
       let reuse = 0, adapt = 0, build = 0;
       seq.forEach((n, i) => {
@@ -823,12 +1158,15 @@
       });
       const agentCount = seq.filter((n) => n.type === "agent").length;
       const conn = Math.max(0, seq.length - 1);
-      document.getElementById("overview-stats").innerHTML = `
-        <strong>${agentCount}</strong> agents<br>
-        <strong>${conn}</strong> pipeline links<br>
-        <strong>${reuse}</strong> reuse · <strong>${adapt}</strong> adapt · <strong>${build}</strong> build`;
-      document.getElementById("center-subtitle").textContent =
-        `${seq.length} components · ${conn} connections`;
+      const overviewEl = document.getElementById("overview-stats");
+      if (overviewEl) {
+        overviewEl.innerHTML = `
+          <strong>${agentCount}</strong> agents<br>
+          <strong>${conn}</strong> pipeline links<br>
+          <strong>${reuse}</strong> reuse · <strong>${adapt}</strong> adapt · <strong>${build}</strong> build`;
+      }
+      const subtitleEl = document.getElementById("center-subtitle");
+      if (subtitleEl) subtitleEl.textContent = `${seq.length} components · ${conn} connections`;
     }
 
 
@@ -882,6 +1220,7 @@
         text: problem,
         subtext: "",
       });
+      setInterviewBusy(true, "Preparing your first question…");
       try {
         const r = await fetch(API + "/interview/start", {
           method: "POST",
@@ -889,7 +1228,10 @@
           body: JSON.stringify({ problem_statement: problem }),
         });
         const { ok, data: d } = await parseJsonResponse(r);
-        if (!ok) throw new Error(d.detail || d.error || "Start failed");
+        if (!ok) {
+          const msg = typeof d.detail === "string" ? d.detail : (d.detail?.msg || d.error || "Start failed");
+          throw new Error(msg);
+        }
         sessionId = d.session_id;
         document.getElementById("session-id").value = sessionId;
         updateSessionBar();
@@ -902,6 +1244,8 @@
         recordLaunchpadQuestion(d);
       } catch (e) {
         addChatEntry({ role: "system", kind: "event", topic: "", topicKey: "setup", who: "Launchpad", text: "Something went wrong: " + e.message });
+      } finally {
+        setInterviewBusy(false);
       }
     };
 
@@ -913,14 +1257,22 @@
         return;
       }
       if (!answer) { alert("Provide an answer."); return; }
+      setInterviewBusy(true, "Saving your answer…");
       try {
         const r = await fetch(API + "/interview/answer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, answer }),
+          body: JSON.stringify({
+            session_id: sessionId,
+            answer,
+            option_id: selectedOptionId === CUSTOM_OPTION_ID ? null : selectedOptionId,
+          }),
         });
         const { ok, data: d } = await parseJsonResponse(r);
-        if (!ok) throw new Error(d.detail || d.error || "Submit failed");
+        if (!ok) {
+          const msg = typeof d.detail === "string" ? d.detail : (d.detail?.msg || d.error || "Submit failed");
+          throw new Error(msg);
+        }
         currentSpec = d.spec;
         renderSpecification(d.spec);
         updateSidebarFooter(d.spec, d.is_complete);
@@ -954,6 +1306,8 @@
         }
       } catch (e) {
         addChatEntry({ role: "system", kind: "event", topic: "", topicKey: "setup", who: "Launchpad", text: "Something went wrong: " + e.message });
+      } finally {
+        setInterviewBusy(false);
       }
     };
 
@@ -993,10 +1347,13 @@
     window.addEventListener("launchpad:flow-stats", (e) => {
       const s = e.detail;
       if (!s) return;
-      document.getElementById("overview-stats").innerHTML = `
-        <strong>${s.agents}</strong> agents<br>
-        <strong>${s.parallelBranches || 0}</strong> parallel branches<br>
-        <strong>${s.reuse}</strong> reuse · <strong>${s.adapt || 0}</strong> adapt · <strong>${s.build}</strong> build`;
+      const overviewEl = document.getElementById("overview-stats");
+      if (overviewEl) {
+        overviewEl.innerHTML = `
+          <strong>${s.agents}</strong> agents<br>
+          <strong>${s.parallelBranches || 0}</strong> parallel branches<br>
+          <strong>${s.reuse}</strong> reuse · <strong>${s.adapt || 0}</strong> adapt · <strong>${s.build}</strong> build`;
+      }
     });
 
     document.getElementById("link-catalog").onclick = (e) => {

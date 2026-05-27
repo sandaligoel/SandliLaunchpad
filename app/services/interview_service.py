@@ -9,6 +9,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.core.config import get_settings
 from app.core.llm_client import AzureLLMClient
 from app.core.logging import get_logger
 from app.prompts.deep_interview import SLOT_DEEP_GUIDANCE
@@ -23,11 +24,12 @@ from app.prompts.interview import (
     SLOT_EXTRACT_USER,
 )
 from app.prompts.interview_context import (
+    compact_spec_json,
     interview_progress_summary,
     related_slots_json,
     sanitize_interview_text,
-    spec_slots_json,
 )
+from app.schemas.slot_extraction import SlotExtractionResult, SlotUpdate
 from app.schemas.architecture_spec import (
     DEPTH_FOLLOWUP_SLOTS,
     GENERIC_ANSWER_MARKERS,
@@ -43,6 +45,7 @@ from app.schemas.interview import (
     InterviewStartResponse,
     InterviewStatusResponse,
 )
+from app.services.interview_heuristics import heuristic_prefill_from_problem
 from app.services.interview_options import default_options_for_slot
 from app.services.session_store import create_session, get_session, update_session
 
@@ -54,16 +57,6 @@ def _slot_label(spec: ArchitectureSpec, key: str | None) -> str | None:
         return None
     slot = next((s for s in spec.slots if s.key == key), None)
     return slot.label if slot else key.replace("_", " ").title()
-
-
-class SlotUpdate(BaseModel):
-    key: str
-    value: str = ""
-    status: SlotStatus = SlotStatus.EMPTY
-
-
-class SlotExtractionResult(BaseModel):
-    slot_updates: list[SlotUpdate] = Field(default_factory=list)
 
 
 class QuestionOptionResult(BaseModel):
@@ -85,7 +78,31 @@ class QuestionResult(BaseModel):
 
 class InterviewService:
     def __init__(self) -> None:
-        self.llm = AzureLLMClient()
+        self._llm: AzureLLMClient | None = None
+
+    @property
+    def llm(self) -> AzureLLMClient:
+        if self._llm is None:
+            self._llm = AzureLLMClient()
+        return self._llm
+
+    @staticmethod
+    def _llm_questions_enabled() -> bool:
+        settings = get_settings()
+        if settings.interview_fast_mode:
+            return settings.interview_llm_questions
+        return True
+
+    @staticmethod
+    def _llm_extract_on_start_enabled() -> bool:
+        settings = get_settings()
+        if settings.interview_fast_mode:
+            return settings.interview_llm_extract_on_start
+        return True
+
+    @staticmethod
+    def _fast_direct_answers_enabled() -> bool:
+        return get_settings().interview_fast_mode
 
     def _new_spec(self, problem_statement: str) -> ArchitectureSpec:
         slots = [
@@ -149,20 +166,21 @@ class InterviewService:
         extra: dict | None = None,
     ) -> list[SlotUpdate]:
         extra = extra or {}
-        current = [
-            {"key": s.key, "label": s.label, "value": s.value, "status": s.status.value}
-            for s in spec.slots
-        ]
+        slots_payload = compact_spec_json(spec)
         user = user_template.format(
-            problem_statement=spec.problem_statement,
+            problem_statement=spec.problem_statement[:3000],
             slot_keys=", ".join(s.key for s in spec.slots),
-            current_slots=json.dumps(current, indent=2),
+            current_slots=slots_payload,
             **extra,
         )
-        result = await self.llm.complete_structured(
-            system, user, SlotExtractionResult
-        )
-        return result.slot_updates
+        try:
+            result = await self.llm.complete_structured(
+                system, user, SlotExtractionResult
+            )
+            return result.slot_updates
+        except Exception as exc:
+            logger.warning("interview_slot_extract_failed", error=str(exc))
+            return []
 
     @staticmethod
     def _is_placeholder_label(label: str, option_id: str) -> bool:
@@ -260,6 +278,45 @@ class InterviewService:
     def _pending_options(self, spec: ArchitectureSpec) -> list[InterviewOption]:
         return [InterviewOption.model_validate(o) for o in spec.pending_options]
 
+    def _apply_direct_slot_answer(self, spec: ArchitectureSpec, target: SpecSlot, answer: str) -> list[str]:
+        target.value = sanitize_interview_text(answer.strip())
+        target.status = SlotStatus.CONFIRMED
+        target.source = "interview"
+        self._mark_depth_if_sufficient(target)
+        spec.updated_at = datetime.utcnow()
+        return [target.key]
+
+    def _can_apply_option_directly(self, spec: ArchitectureSpec, option_id: str | None) -> bool:
+        if not option_id or option_id == "__custom__":
+            return False
+        return any(o.get("id") == option_id for o in spec.pending_options)
+
+    def _finalize_spec_after_updates(self, spec: ArchitectureSpec) -> None:
+        for s in spec.slots:
+            if s.key not in DEPTH_FOLLOWUP_SLOTS:
+                s.depth_followup_done = True
+            elif s.status == SlotStatus.CONFIRMED:
+                self._mark_depth_if_sufficient(s)
+
+    def _build_question_fast(
+        self,
+        spec: ArchitectureSpec,
+        target: SpecSlot,
+        *,
+        followup: bool = False,
+    ) -> tuple[str, list[InterviewOption]]:
+        related_json = related_slots_json(spec, target.key)
+        if followup:
+            question = (
+                f"Can you name each automated step for {target.label.lower()}, in order?"
+            )
+        else:
+            question = self._fallback_question_for_slot(spec, target, related_json)
+        options = default_options_for_slot(target.key, target.label)
+        question, options = self._sanitize_question_result(question, options)
+        self._set_pending_question(spec, target, question, options, is_followup=followup)
+        return question, options
+
     def _sanitize_question_result(
         self, question: str, options: list[InterviewOption]
     ) -> tuple[str, list[InterviewOption]]:
@@ -282,7 +339,10 @@ class InterviewService:
         *,
         followup: bool = False,
     ) -> tuple[str, list[InterviewOption]]:
-        spec_json = spec_slots_json(spec)
+        if not self._llm_questions_enabled():
+            return self._build_question_fast(spec, target, followup=followup)
+
+        spec_json = compact_spec_json(spec)
         related_json = related_slots_json(spec, target.key)
         progress = interview_progress_summary(spec)
         common = {
@@ -374,15 +434,14 @@ class InterviewService:
 
     async def start(self, problem_statement: str) -> InterviewStartResponse:
         spec = self._new_spec(problem_statement)
-        updates = await self._extract_slots_from_text(
-            spec, SLOT_EXTRACT_SYSTEM, SLOT_EXTRACT_USER
-        )
-        self._apply_updates(spec, updates)
-        for s in spec.slots:
-            if s.key not in DEPTH_FOLLOWUP_SLOTS:
-                s.depth_followup_done = True
-            elif s.status == SlotStatus.CONFIRMED:
-                self._mark_depth_if_sufficient(s)
+        self._apply_updates(spec, heuristic_prefill_from_problem(problem_statement))
+        if self._llm_extract_on_start_enabled():
+            updates = await self._extract_slots_from_text(
+                spec, SLOT_EXTRACT_SYSTEM, SLOT_EXTRACT_USER
+            )
+            if updates:
+                self._apply_updates(spec, updates)
+        self._finalize_spec_after_updates(spec)
         if spec.is_complete():
             spec.ready_for_plan = True
         sid = create_session(spec)
@@ -400,6 +459,7 @@ class InterviewService:
             "interview_started",
             session_id=sid,
             completion=spec.completion_pct(),
+            fast_mode=get_settings().interview_fast_mode,
             slot_count=len(spec.slots),
         )
         return InterviewStartResponse(
@@ -423,6 +483,7 @@ class InterviewService:
         self,
         session_id: str,
         answer: str,
+        option_id: str | None = None,
         force_complete: bool = False,
     ) -> InterviewAnswerResponse:
         spec = get_session(session_id)
@@ -444,6 +505,12 @@ class InterviewService:
             target.source = "interview"
             spec.pending_is_followup = False
             changed = [target.key]
+        elif target and (
+            self._can_apply_option_directly(spec, option_id)
+            or (self._fast_direct_answers_enabled() and not force_complete)
+        ):
+            changed = self._apply_direct_slot_answer(spec, target, answer)
+            self._finalize_spec_after_updates(spec)
         else:
             updates = await self._extract_slots_from_text(
                 spec,
@@ -452,15 +519,13 @@ class InterviewService:
                 {
                     "target_slot": target_key,
                     "target_label": target_label,
-                    "answer": answer,
+                    "answer": answer[:2000],
                 },
             )
             changed = self._apply_updates(spec, updates)
-            for s in spec.slots:
-                if s.key not in DEPTH_FOLLOWUP_SLOTS:
-                    s.depth_followup_done = True
-            if target:
-                self._mark_depth_if_sufficient(target)
+            if target and not changed and answer.strip():
+                changed = self._apply_direct_slot_answer(spec, target, answer)
+            self._finalize_spec_after_updates(spec)
 
         if force_complete:
             spec.ready_for_plan = True

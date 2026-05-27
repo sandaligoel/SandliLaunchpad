@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     default_solution_agents_pdf: str = "data/documents/solution_agents.pdf"
     solution_catalog_auto_detect: bool = True
 
+    # Interview speed: fast mode skips LLM on start and uses template questions.
+    interview_fast_mode: bool = True
+    interview_llm_extract_on_start: bool = False
+    interview_llm_questions: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors(cls, v: object) -> list[str]:
