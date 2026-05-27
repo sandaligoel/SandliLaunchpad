@@ -7,4 +7,4 @@ BASE="${BASE%/}"
 echo "Health: $BASE/health"
 curl -sf "$BASE/health" | head -c 500
 echo ""
-echo "OK — set AFFINE_API_TARGET=$BASE in agentforge-ui/.env.local and restart npm run dev"
+echo "OK — set AFFINE_API_TARGET=$BASE in frontend/.env.local and restart npm run dev"

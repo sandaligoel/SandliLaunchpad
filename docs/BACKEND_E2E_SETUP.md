@@ -10,7 +10,7 @@ Complete path from zero → interview + architecture API working with AgentForge
 Browser (localhost:5173)
     │  /api/sessions, /health  → Vite proxy
     ▼
-FastAPI (agent_catalog) :8003 or :8004
+FastAPI (backend) :8003 or :8004
     ├── data/sessions/*.json     (interview persistence)
     ├── Azure OpenAI             (questions + spec + architecture)
     └── Azure AI Search          (agent catalog)
@@ -31,14 +31,14 @@ Image already built: `749b44415c9d4d2b9052d2b2d61f491c.azurecr.io/affine-agent-c
 ### 1.1 Python environment
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 1.2 Fill `agent_catalog/.env`
+### 1.2 Fill `backend/.env`
 
 | Variable | Purpose |
 |----------|---------|
@@ -64,7 +64,7 @@ python scripts/validate_catalog.py
 ### Terminal 1 — AFFINE API
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 source .venv/bin/activate
 uvicorn api.main:app --reload --host 127.0.0.1 --port 8003
 ```
@@ -82,17 +82,17 @@ If you use **8004** instead, match that port everywhere below.
 
 ```bash
 cd /Users/gurucharanm/projects/AFFINE
-./scripts/start-agentforge-mock.sh
+./scripts/start-mock-api.sh
 ```
 
 ### Terminal 3 — UI
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agentforge-ui
+cd /Users/gurucharanm/projects/AFFINE/frontend
 npm run dev
 ```
 
-### 2.1 UI env (`agentforge-ui/.env.local`)
+### 2.1 UI env (`frontend/.env.local`)
 
 ```env
 AFFINE_API_TARGET=http://127.0.0.1:8003
@@ -121,7 +121,7 @@ Manual UI test:
 Data checks:
 
 ```bash
-ls -lt agent_catalog/data/sessions/ | head -3
+ls -lt backend/data/sessions/ | head -3
 ```
 
 ---
@@ -132,7 +132,7 @@ ls -lt agent_catalog/data/sessions/ | head -3
 |------|-----------------|
 | Image in ACR | Done — `affine-agent-catalog:v1` |
 | Container App URL | Needs admin or Contributor on RG **Affine** |
-| Env vars on container | Copy all from `agent_catalog/.env` |
+| Env vars on container | Copy all from `backend/.env` |
 | UI connect | `AFFINE_API_TARGET=https://<fqdn>` |
 
 See [CONNECT_AZURE_BACKEND.md](./CONNECT_AZURE_BACKEND.md).
@@ -168,13 +168,13 @@ See [CONNECT_AZURE_BACKEND.md](./CONNECT_AZURE_BACKEND.md).
 
 ```bash
 # Terminal 1
-cd agent_catalog && source .venv/bin/activate && uvicorn api.main:app --reload --host 127.0.0.1 --port 8003
+cd backend && source .venv/bin/activate && uvicorn api.main:app --reload --host 127.0.0.1 --port 8003
 
 # Terminal 2
-./scripts/start-agentforge-mock.sh
+./scripts/start-mock-api.sh
 
 # Terminal 3
-cd agentforge-ui && npm run dev
+cd frontend && npm run dev
 
 # Verify
 ./scripts/verify-backend-e2e.sh

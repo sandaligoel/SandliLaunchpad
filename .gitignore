@@ -1,14 +1,19 @@
-# Secrets
+# Secrets — never commit
 .env
 *.env.local
-agent_catalog/.env
+backend/.env
+frontend/.env.local
 
-# Local / cloud-synced runtime data (use Azure Blob in deployed env)
-agent_catalog/data/sessions/
-agent_catalog/data/blob_mirror/
-agent_catalog/homebrew/
+# Reference clones / local experiments
+.ref-launchpad/
+
+# Backend runtime data (use Azure Blob in shared env)
+backend/data/sessions/
+backend/data/blob_mirror/
+backend/homebrew/
 
 # Python
+backend/.venv/
 .venv/
 venv/
 __pycache__/
@@ -20,13 +25,12 @@ __pycache__/
 # Node
 node_modules/
 dist/
-*.local
+.wrangler/
+frontend/.tanstack/
 
 # OS / IDE
 .DS_Store
 .idea/
 .vscode/
 *.swp
-
-# Logs
 *.log

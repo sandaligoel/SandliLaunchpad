@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload existing agent_catalog/data/sessions/*.json into Azure Blob."""
+"""Upload existing backend/data/sessions/*.json into Azure Blob."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "agent_catalog"
+CATALOG = ROOT / "backend"
 sys.path.insert(0, str(CATALOG))
 
 from dotenv import load_dotenv
@@ -22,7 +22,7 @@ from services.data_storage import blob_storage_configured, get_data_storage  # n
 def main() -> int:
     if not blob_storage_configured():
         print(
-            "Set DATA_STORAGE_BACKEND=blob and AZURE_STORAGE_* in agent_catalog/.env",
+            "Set DATA_STORAGE_BACKEND=blob and AZURE_STORAGE_* in backend/.env",
             file=sys.stderr,
         )
         return 1

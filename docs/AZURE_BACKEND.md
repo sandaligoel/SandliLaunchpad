@@ -1,6 +1,6 @@
 # Deploy AFFINE backend on Azure (container)
 
-The backend is **`agent_catalog/`** — a FastAPI app that calls **Azure OpenAI** and **Azure AI Search**. Your container should listen on **port 8000** and expose **`GET /health`**.
+The backend is **`backend/`** — a FastAPI app that calls **Azure OpenAI** and **Azure AI Search**. Your container should listen on **port 8000** and expose **`GET /health`**.
 
 ---
 
@@ -16,7 +16,7 @@ The backend is **`agent_catalog/`** — a FastAPI app that calls **Azure OpenAI*
 Search index (one-time, from your machine or a build job):
 
 ```bash
-cd agent_catalog
+cd backend
 python scripts/create_index.py
 python -m pipeline.run --source ./data/spec.json
 ```
@@ -28,7 +28,7 @@ python -m pipeline.run --source ./data/spec.json
 From repo root:
 
 ```bash
-cd agent_catalog
+cd backend
 docker build -t affine-agent-catalog:local .
 docker run --rm -p 8000:8000 --env-file .env affine-agent-catalog:local
 ```
@@ -173,7 +173,7 @@ Health check path: `/health`
 
 ## Step 4 — Point the frontend at Azure
 
-In **`agentforge-ui`** production env:
+In **`frontend`** production env:
 
 ```bash
 VITE_AFFINE_API_BASE=https://<your-container-app-fqdn>
@@ -213,4 +213,4 @@ Rebuild and deploy the UI. In dev, `AFFINE_API_TARGET` in `.env.local` still pro
 - `POST /api/sessions/{id}/turn`
 - `POST /api/sessions/{id}/architecture` — generate plan
 
-Router prefix is `/api` (see `agent_catalog/api/routes.py`).
+Router prefix is `/api` (see `backend/api/routes.py`).

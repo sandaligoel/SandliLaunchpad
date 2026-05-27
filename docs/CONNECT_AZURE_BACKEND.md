@@ -62,7 +62,7 @@ Ask for the HTTPS URL, e.g. `https://something.azurecontainerapps.io`.
 
 ## Part 2 — Configure the running container (env vars)
 
-On the Container App / Web App, set environment variables from `agent_catalog/.env`:
+On the Container App / Web App, set environment variables from `backend/.env`:
 
 | Variable | Required |
 |----------|----------|
@@ -91,7 +91,7 @@ chmod +x scripts/test-azure-api.sh
 ./scripts/test-azure-api.sh https://YOUR-API-HOST.azurecontainerapps.io
 ```
 
-**Step 2** — Edit `agentforge-ui/.env.local`:
+**Step 2** — Edit `frontend/.env.local`:
 
 ```env
 AFFINE_API_TARGET=https://YOUR-API-HOST.azurecontainerapps.io
@@ -104,7 +104,7 @@ Use **https**, no trailing slash. Empty `VITE_AFFINE_API_BASE` lets Vite **proxy
 **Step 3** — Restart UI:
 
 ```bash
-cd agentforge-ui
+cd frontend
 npm run dev
 ```
 

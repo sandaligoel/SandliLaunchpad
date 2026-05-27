@@ -1,6 +1,6 @@
 # AFFINE ↔ AgentForge UI — integration steps
 
-Work in `agentforge-ui/`. AFFINE API: `agent_catalog` on **8003**. Mock API: **3001**.
+Work in `frontend/`. AFFINE API: `backend` on **8003**. Mock API: **3001**.
 
 | Step | Status | What |
 |------|--------|------|
@@ -13,7 +13,7 @@ Work in `agentforge-ui/`. AFFINE API: `agent_catalog` on **8003**. Mock API: **3
 ## Step 1 — verify
 
 1. Terminal: `uvicorn` on **8003** (mock API on 3001 optional for other pages).
-2. `cd agentforge-ui && npm run dev` → http://localhost:5173
+2. `cd frontend && npm run dev` → http://localhost:5173
 3. Sidebar **Agent Launchpad** or Dashboard **Agent Launchpad**.
 4. Green path: no red API banner → problem statement → **Start interview** → clarifying Qs → requirements.
 

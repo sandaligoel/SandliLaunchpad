@@ -2,7 +2,7 @@
 
 This guide assumes:
 
-- Backend code: `agent_catalog/` (FastAPI)
+- Backend code: `backend/` (FastAPI)
 - You already have **Azure** access (`az login` → subscription **Affine-Main**)
 - You have (or will get) an **Azure Container Registry (ACR)** and a place to **run** the container (Container Apps, App Service, or Container Instances)
 
@@ -28,7 +28,7 @@ Your machine does **not** need Docker if you use **`az acr build`** (build runs 
 ### 0.1 Tools on your Mac
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 source .venv/bin/activate
 az login
 az account show --output table
@@ -36,7 +36,7 @@ az account show --output table
 
 You should see **Affine-Main** (subscription id `790df8b9-eea1-44f4-8545-086b629260e1`).
 
-### 0.2 Fill `agent_catalog/.env`
+### 0.2 Fill `backend/.env`
 
 Copy from `.env.example` if needed. You need **real** values for:
 
@@ -50,7 +50,7 @@ Copy from `.env.example` if needed. You need **real** values for:
 Still run against the **same** Search service as in `.env`:
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 source .venv/bin/activate
 python scripts/create_index.py
 python -m pipeline.run --source ./data/spec.json
@@ -114,7 +114,7 @@ export ACR_LOGIN_SERVER="<paste-login-server>"
 From the folder that contains the `Dockerfile`:
 
 ```bash
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 
 az acr build \
   --registry $ACR_NAME \
@@ -127,7 +127,7 @@ Wait until it says **Run ID** succeeded (5–15 minutes).
 
 **If you get AuthorizationFailed:** you need **Contributor** or **AcrBuild** on that registry. Send admin:
 
-> Please grant **AcrPush** and **AcrBuild** on ACR `<ACR_NAME>` in RG `<ACR_RG>` to `i-gurucharan.m@affine.ai`, or run the `az acr build` command above for branch AFFINE `agent_catalog`.
+> Please grant **AcrPush** and **AcrBuild** on ACR `<ACR_NAME>` in RG `<ACR_RG>` to `i-gurucharan.m@affine.ai`, or run the `az acr build` command above for branch AFFINE `backend`.
 
 ### Step 1.3 — Confirm image is stored
 
@@ -259,7 +259,7 @@ The container needs the same secrets as local `.env`. **Do not** bake `.env` int
 
 ### Step 3.1 — Prepare values
 
-From `agent_catalog/.env`, you will set each variable on the running app.
+From `backend/.env`, you will set each variable on the running app.
 
 Also set:
 
@@ -339,7 +339,7 @@ Expect: `{"status":"ok",...}`
 
 ### Step 4.2 — UI environment
 
-In `agentforge-ui/.env.local` (dev with proxy) keep:
+In `frontend/.env.local` (dev with proxy) keep:
 
 ```env
 AFFINE_API_TARGET=http://127.0.0.1:8003
@@ -352,7 +352,7 @@ For **production build** (UI hosted on Azure / Cloudflare / static host):
 VITE_AFFINE_API_BASE=https://<your-fqdn-from-phase-2>
 ```
 
-Rebuild UI: `cd agentforge-ui && npm run build`
+Rebuild UI: `cd frontend && npm run build`
 
 ### Step 4.3 — CORS
 
@@ -404,7 +404,7 @@ export ACR_LOGIN_SERVER="$(az acr show -n $ACR_NAME -g $ACR_RG --query loginServ
 export FULL_IMAGE="${ACR_LOGIN_SERVER}/affine-agent-catalog:v1"
 
 # 2. Build & store image
-cd /Users/gurucharanm/projects/AFFINE/agent_catalog
+cd /Users/gurucharanm/projects/AFFINE/backend
 az acr build --registry $ACR_NAME --resource-group $ACR_RG --image affine-agent-catalog:v1 .
 
 # 3. Deploy (after env + app exist)

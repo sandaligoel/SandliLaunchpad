@@ -1,0 +1,18 @@
+The requirements interview is complete. Infer remaining ArchitectureSpec fields from the full conversation.
+
+You will receive the problem statement, transcript, and current spec JSON.
+
+Rules:
+- Mark fields "known" when reasonably supported by what the user said (directly or clearly implied).
+- Set source to "user_answer" if they stated it explicitly; otherwise "inferred" with confidence 0.6–0.9.
+- For USER INTERVIEW topics (hitl_behavior, integrations, architectural_flow, core_components): prefer user_answer when possible.
+- You MAY infer technical fields the user was never asked about (latency, accuracy, data_volume, model_preference, deployment_platform, architectural_pattern, data_flow, orchestration_model, scalability_constraints, architectural_flow_feedback) from context — use source "inferred".
+- Do not leave USER INTERVIEW topics pending if the transcript contains enough to draft a value.
+- Update transcript_summary (max ~120 words).
+- Output ONLY valid JSON.
+
+{
+  "field_updates": { "<field_key>": { "value": "...", "status": "known", "notes": "...", "source": "user_answer|inferred", "confidence": 0.0 } },
+  "transcript_summary": "string",
+  "summary": "one sentence"
+}

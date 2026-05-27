@@ -1,9 +1,3 @@
 #!/usr/bin/env bash
-# Mock API for AgentForge UI (workflows, agents, dashboard). Port 3001.
-set -e
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/agentforge-mock-api"
-if [ ! -d node_modules ]; then
-  npm install
-fi
-exec npm run dev
+# Alias — use scripts/start-mock-api.sh
+exec "$(cd "$(dirname "$0")" && pwd)/start-mock-api.sh" "$@"

@@ -1,42 +1,55 @@
 # AFFINE — Agent Launchpad
 
-Affine Agent Catalog (Phase 1) and smart requirements interview (Phase 2).
+Agent requirements interview, architecture planning, and visual workflow builder for Affine Analytics.
 
-## Projects
+## Repository layout
 
-| Directory | Phase | Description |
-|-----------|-------|-------------|
-| [agent_catalog/](agent_catalog/) | 1 & 2 | Catalog JSON ingest, Azure AI Search index, FastAPI interview API |
-| [agentforge-ui/](agentforge-ui/) | 2–3 | **AgentForge UI** (Dashboard, Builder, Workflows, Agent Library) |
-| [agentforge-mock-api/](agentforge-mock-api/) | — | Mock API for AgentForge screens (port 3001) |
-| [launchpad-ui/](launchpad-ui/) | 2 | Legacy minimal React UI |
-
-## Quick start
-
-**Step-by-step:** [START.md](START.md) (three terminals for AgentForge UI + mock API + AFFINE).
-
-```bash
-# AFFINE API
-cd agent_catalog && source .venv/bin/activate
-uvicorn api.main:app --reload --host 127.0.0.1 --port 8003
-
-# Mock API (workflows, agents, dashboard)
-./scripts/start-agentforge-mock.sh
-
-# AgentForge UI
-cd agentforge-ui && npm install && npm run dev
+```
+AFFINE/
+├── backend/          # Python FastAPI — interview API, catalog, Azure storage
+├── frontend/         # React (Vite) — Agent Launchpad UI
+├── mock-api/         # Optional Node mock — dashboard demo data (port 3001)
+├── config/           # Fixed dev ports (dev-ports.json)
+├── scripts/          # Start / sync / verify helpers
+└── docs/             # Setup guides for your team
 ```
 
-Open http://localhost:5173. Legacy UI: `launchpad-ui/`. Integration plan: [docs/INTEGRATION_AGENTIC_LAUNCHPAD.md](docs/INTEGRATION_AGENTIC_LAUNCHPAD.md).
+## Quick start (local)
 
-See [agent_catalog/README.md](agent_catalog/README.md) (catalog index) and [agent_catalog/README_PHASE2.md](agent_catalog/README_PHASE2.md) (interview).
-
-## Phase 3
-
-Architecture planning API — see [agent_catalog/README_PHASE3.md](agent_catalog/README_PHASE3.md).
+**Full guide:** [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md)
 
 ```bash
-curl -X POST http://127.0.0.1:8001/api/sessions/{session_id}/architecture
+# One-time
+./scripts/sync-dev-env.sh
+cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+cp .env.example .env   # add Azure keys (see docs/WHAT_TO_SHARE.md)
+cd ../frontend && npm install
+cd ../mock-api && npm install   # optional, for Dashboard
+
+# Every day — 3 terminals
+./scripts/start-backend.sh      # → http://127.0.0.1:8003
+./scripts/start-mock-api.sh     # → http://127.0.0.1:3001 (optional)
+cd frontend && npm run dev      # → http://localhost:5173
 ```
 
-**Canvas UI:** `cd launchpad-ui && npm run dev` → http://localhost:5173 (Architecture tab after interview).
+| Screen | URL |
+|--------|-----|
+| Agent Launchpad (interview) | http://localhost:5173/interview |
+| Workflow builder | http://localhost:5173/builder |
+| Workflows (saved) | http://localhost:5173/workflows |
+
+Ports are defined in [config/dev-ports.json](config/dev-ports.json) — do not change per developer without updating that file.
+
+## What to give a new teammate
+
+See [docs/WHAT_TO_SHARE.md](docs/WHAT_TO_SHARE.md) (repo access + Azure credentials checklist, no secrets in git).
+
+## Backend docs
+
+- [backend/README.md](backend/README.md) — catalog index & pipeline
+- [backend/README_PHASE2.md](backend/README_PHASE2.md) — interview API
+- [backend/README_PHASE3.md](backend/README_PHASE3.md) — architecture planning
+
+## Azure
+
+Sessions and workflow canvases persist to **Azure Blob** when `backend/.env` has `DATA_STORAGE_BACKEND=blob` and valid storage credentials.

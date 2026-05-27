@@ -13,7 +13,7 @@ launchpad/
   workflows/_index.json          # workflow list for the Workflows page
 ```
 
-## Configure `agent_catalog/.env`
+## Configure `backend/.env`
 
 **Required for localhost to load/save previous work in Azure** (keep existing OpenAI / Search vars):
 
@@ -36,7 +36,7 @@ The UI **Agent Launchpad** page lists **Continue a previous interview** from `GE
 Install the new dependency and restart the API:
 
 ```bash
-cd agent_catalog
+cd backend
 .venv/bin/pip install azure-storage-blob
 ./scripts/start-affine-api.sh   # or your usual uvicorn command
 ```
@@ -46,7 +46,7 @@ On startup you should see a log line like: `Data storage: Azure Blob account=aff
 ## Migrate existing local sessions
 
 ```bash
-cd agent_catalog
+cd backend
 export DATA_STORAGE_BACKEND=blob
 export AZURE_STORAGE_ACCOUNT_NAME=affineblog
 export AZURE_STORAGE_CONTAINER_NAME=agentic-launchpad
@@ -62,4 +62,4 @@ Workflows that only exist in **browser localStorage** are uploaded the next time
 
 ## Local dev without Azure
 
-Leave `DATA_STORAGE_BACKEND` unset or set `DATA_STORAGE_BACKEND=local`. Data is mirrored under `agent_catalog/data/blob_mirror/` and legacy `data/sessions/` still works.
+Leave `DATA_STORAGE_BACKEND` unset or set `DATA_STORAGE_BACKEND=local`. Data is mirrored under `backend/data/blob_mirror/` and legacy `data/sessions/` still works.

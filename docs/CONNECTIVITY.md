@@ -15,11 +15,11 @@ Check: http://127.0.0.1:8003/health → `{"status":"ok",...}`
 ### Terminal 2 — AgentForge UI
 
 ```bash
-cd agentforge-ui
+cd frontend
 npm run dev
 ```
 
-`agentforge-ui/.env.local` should contain:
+`frontend/.env.local` should contain:
 
 ```env
 AFFINE_API_TARGET=http://127.0.0.1:8003
@@ -37,7 +37,7 @@ Vite proxies:
 ### Terminal 3 (optional) — Mock API
 
 ```bash
-./scripts/start-agentforge-mock.sh
+./scripts/start-mock-api.sh
 ```
 
 Open http://localhost:5173 → **Agent Launchpad** / interview.
@@ -64,13 +64,13 @@ Or: admin deploys the image and gives you the **HTTPS URL** of the running API.
 Use existing RG **`Affine`** (not a new `affine-rg`):
 
 ```bash
-cd agent_catalog
+cd backend
 az acr create --resource-group Affine --name <unique-acr-name> --sku Basic
 az acr build --registry <unique-acr-name> --image affine-agent-catalog:v1 .
 # … Container App — see docs/AZURE_BACKEND.md
 ```
 
-Set app env vars from `agent_catalog/.env` (OpenAI + Search keys). Add your UI origin to `CORS_ORIGINS`.
+Set app env vars from `backend/.env` (OpenAI + Search keys). Add your UI origin to `CORS_ORIGINS`.
 
 ### Point production UI at Azure API
 
@@ -78,7 +78,7 @@ Set app env vars from `agent_catalog/.env` (OpenAI + Search keys). Add your UI o
 VITE_AFFINE_API_BASE=https://<your-api-host>
 ```
 
-Rebuild `agentforge-ui` and deploy the static app. No Vite proxy in production — the browser calls the API URL directly.
+Rebuild `frontend` and deploy the static app. No Vite proxy in production — the browser calls the API URL directly.
 
 ---
 
