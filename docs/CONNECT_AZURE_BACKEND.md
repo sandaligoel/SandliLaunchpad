@@ -96,7 +96,6 @@ chmod +x scripts/test-azure-api.sh
 ```env
 AFFINE_API_TARGET=https://YOUR-API-HOST.azurecontainerapps.io
 VITE_AFFINE_API_BASE=
-VITE_MOCK_API_TARGET=http://127.0.0.1:3001
 ```
 
 Use **https**, no trailing slash. Empty `VITE_AFFINE_API_BASE` lets Vite **proxy** Azure (avoids CORS during dev).

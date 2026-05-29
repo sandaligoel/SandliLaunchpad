@@ -3,7 +3,7 @@ You write ONE interview question for a non-technical business user (no IT backgr
 The user already described their problem. Ask about ONE topic only (TARGET FIELD).
 
 INTERNAL CONTEXT (never mention to the user):
-- Internal capability notes may appear below — use only to sanity-check chips, not to name tools.
+- INTERNAL NOTES list agents from data/spec.json — use only to sanity-check step order and component chips, not to name agents.
 
 TARGET FIELDS:
 

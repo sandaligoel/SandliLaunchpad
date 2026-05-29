@@ -47,20 +47,25 @@ app.include_router(router)
 
 @app.on_event("startup")
 def _on_startup() -> None:
-    """Ensure workflow index matches Azure Blob and log storage connectivity."""
+    """Log storage connectivity; rebuild workflow index only when missing."""
     from api import builder_store
 
     try:
-        count = builder_store.rebuild_workflow_index()
+        storage = get_data_storage()
+        index_raw = storage.read_json(builder_store.WORKFLOW_INDEX_KEY)
+        if index_raw and index_raw.get("entries"):
+            count = len(index_raw["entries"])
+        else:
+            count = builder_store.rebuild_workflow_index()
         st = get_storage_status()
         logger.info(
-            "Launchpad storage=%s sessions=%s workflows=%s (index rebuilt)",
+            "Launchpad storage=%s sessions=%s workflows=%s",
             st.get("backend", "unknown"),
             st.get("session_blob_count", "?"),
-            st.get("workflow_blob_count", count),
+            count,
         )
     except Exception as exc:
-        logger.warning("Workflow index rebuild on startup failed: %s", exc)
+        logger.warning("Startup storage check failed: %s", exc)
 
 
 @app.get("/")
@@ -86,11 +91,3 @@ app.mount(
     StaticFiles(directory=str(STATIC_DIR), html=True),
     name="launchpad-ui",
 )
-
-ARCHITECTURE_STATIC = STATIC_DIR / "architecture"
-if ARCHITECTURE_STATIC.is_dir():
-    app.mount(
-        "/static/architecture",
-        StaticFiles(directory=str(ARCHITECTURE_STATIC), html=True),
-        name="architecture-flow",
-    )

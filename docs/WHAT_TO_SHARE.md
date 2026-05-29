@@ -51,7 +51,7 @@ Restart `npm run dev` after changing.
 | Secrets | `backend/.env`, `frontend/.env.local` |
 | Local session files | `backend/data/sessions/` |
 | Python venv | `backend/.venv/` |
-| node_modules | `frontend/node_modules/`, `mock-api/node_modules/` |
+| node_modules | `frontend/node_modules/` |
 
 All of the above are in `.gitignore`.
 
@@ -59,8 +59,7 @@ All of the above are in `.gitignore`.
 
 Share [config/dev-ports.json](../config/dev-ports.json):
 
-- Backend **8003**
-- Mock API **3001**
+- Backend **8003** (or next free port in `runtime-ports.json`)
 - Frontend **5173**
 
 Run once after clone:

@@ -58,6 +58,9 @@ def _load_from_storage(session_id: str) -> Optional[InterviewSession]:
                 "Could not parse session %s from storage: %s", session_id, exc
             )
 
+    if blob_storage_configured():
+        return None
+
     path = _legacy_session_path(session_id)
     if path.is_file():
         try:
@@ -72,22 +75,22 @@ def _load_from_storage(session_id: str) -> Optional[InterviewSession]:
     return None
 
 
-def save(session: InterviewSession, *, lightweight: bool = False) -> None:
+def save(session: InterviewSession) -> None:
     with _lock:
         _sessions[session.id] = session
-    if lightweight:
-        return
     _persist(session)
-    try:
-        from services.builder_sync import sync_workflow_from_session
+    # During requirements chat there is no architecture plan yet — skip extra blob writes.
+    if session.architecture_plan is not None or session.spec.status == "ready":
+        try:
+            from services.builder_sync import sync_workflow_from_session
 
-        sync_workflow_from_session(session)
-    except Exception as exc:
-        logger.warning(
-            "Builder workflow sync after session save failed for %s: %s",
-            session.id,
-            exc,
-        )
+            sync_workflow_from_session(session)
+        except Exception as exc:
+            logger.warning(
+                "Builder workflow sync after session save failed for %s: %s",
+                session.id,
+                exc,
+            )
 
 
 def get(session_id: str) -> Optional[InterviewSession]:
@@ -117,13 +120,18 @@ def _session_rank(raw: dict) -> tuple:
 
 
 def list_session_summaries(*, limit: int = 50) -> list[dict]:
-    """List saved interviews from Azure Blob (or local mirror), newest first."""
+    """List saved interviews from storage (newest blobs first, capped scan)."""
     storage = get_data_storage()
     keys = storage.list_keys_by_mtime("sessions", newest_first=True)
     rows: list[tuple[tuple, dict]] = []
+    max_scan = min(len(keys), max(limit * 4, limit))
+    scanned = 0
     for key in keys:
+        if scanned >= max_scan:
+            break
         if not key.startswith("sessions/") or not key.endswith(".json"):
             continue
+        scanned += 1
         session_id = key.split("/")[-1].replace(".json", "")
         raw = storage.read_json(_session_storage_key(session_id))
         if not raw:

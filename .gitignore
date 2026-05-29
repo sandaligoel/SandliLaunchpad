@@ -3,6 +3,7 @@
 *.env.local
 backend/.env
 frontend/.env.local
+config/runtime-ports.json
 
 # Reference clones / local experiments
 .ref-launchpad/

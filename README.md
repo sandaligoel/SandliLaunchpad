@@ -6,50 +6,44 @@ Agent requirements interview, architecture planning, and visual workflow builder
 
 ```
 AFFINE/
-├── backend/          # Python FastAPI — interview API, catalog, Azure storage
+├── backend/          # Python FastAPI — interview, catalog, Azure storage
 ├── frontend/         # React (Vite) — Agent Launchpad UI
-├── mock-api/         # Optional Node mock — dashboard demo data (port 3001)
-├── config/           # Fixed dev ports (dev-ports.json)
-├── scripts/          # Start / sync / verify helpers
-└── docs/             # Setup guides for your team
+├── config/           # Dev port defaults + runtime-ports.json (auto)
+├── scripts/          # start-backend, sync-dev-env, doctor
+└── docs/             # Setup and architecture guides
 ```
 
-## Quick start (local)
+## Quick start
 
-**Full guide:** [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md)
+**Guide:** [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md) · **Ports/health:** `./scripts/doctor.sh`
 
 ```bash
 # One-time
 ./scripts/sync-dev-env.sh
 cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-cp .env.example .env   # add Azure keys (see docs/WHAT_TO_SHARE.md)
+cp .env.example .env   # Azure keys — see docs/WHAT_TO_SHARE.md
 cd ../frontend && npm install
-cd ../mock-api && npm install   # optional, for Dashboard
 
-# Every day — 3 terminals
-./scripts/start-backend.sh      # → http://127.0.0.1:8003
-./scripts/start-mock-api.sh     # → http://127.0.0.1:3001 (optional)
-cd frontend && npm run dev      # → http://localhost:5173
+# Every day — 2 terminals
+./scripts/start-backend.sh
+cd frontend && npm run dev
 ```
 
 | Screen | URL |
 |--------|-----|
-| Agent Launchpad (interview) | http://localhost:5173/interview |
+| Agent Launchpad (chat) | http://localhost:5173/interview |
 | Workflow builder | http://localhost:5173/builder |
 | Workflows (saved) | http://localhost:5173/workflows |
 
-Ports are defined in [config/dev-ports.json](config/dev-ports.json) — do not change per developer without updating that file.
+Ports: [config/dev-ports.json](config/dev-ports.json) + gitignored `config/runtime-ports.json`. After backend restarts, run `./scripts/sync-dev-env.sh` and restart `npm run dev`.
 
-## What to give a new teammate
+## Docs
 
-See [docs/WHAT_TO_SHARE.md](docs/WHAT_TO_SHARE.md) (repo access + Azure credentials checklist, no secrets in git).
-
-## Backend docs
-
+- [START.md](START.md) — short daily commands
+- [docs/STORAGE_ARCHITECTURE.md](docs/STORAGE_ARCHITECTURE.md) — API + Azure persistence
+- [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md) — full onboarding
 - [backend/README.md](backend/README.md) — catalog index & pipeline
-- [backend/README_PHASE2.md](backend/README_PHASE2.md) — interview API
-- [backend/README_PHASE3.md](backend/README_PHASE3.md) — architecture planning
 
 ## Azure
 
-Sessions and workflow canvases persist to **Azure Blob** when `backend/.env` has `DATA_STORAGE_BACKEND=blob` and valid storage credentials.
+Sessions and workflows persist to **Azure Blob** when `backend/.env` has `DATA_STORAGE_BACKEND=blob` and valid storage credentials.

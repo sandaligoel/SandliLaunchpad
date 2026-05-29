@@ -36,7 +36,18 @@ class DataStorage(ABC):
 
     def list_keys_by_mtime(self, prefix: str, *, newest_first: bool = True) -> list[str]:
         """List JSON object keys under prefix, ordered by last modified time."""
-        return list(reversed(self.list_keys(prefix))) if newest_first else self.list_keys(prefix)
+        pairs = self.list_keys_with_mtime(prefix, newest_first=newest_first)
+        return [key for key, _ in pairs]
+
+    def list_keys_with_mtime(
+        self, prefix: str, *, newest_first: bool = True
+    ) -> list[tuple[str, datetime]]:
+        """List keys under prefix with UTC last-modified timestamps."""
+        keys = self.list_keys(prefix)
+        now = datetime.now(timezone.utc)
+        pairs = [(k, now) for k in keys]
+        pairs.sort(key=lambda pair: pair[1], reverse=newest_first)
+        return pairs
 
 
 def _safe_key(key: str) -> str:
@@ -82,22 +93,28 @@ class LocalDataStorage(DataStorage):
     def list_keys(self, prefix: str) -> list[str]:
         return self.list_keys_by_mtime(prefix, newest_first=False)
 
-    def list_keys_by_mtime(self, prefix: str, *, newest_first: bool = True) -> list[str]:
+    def list_keys_with_mtime(
+        self, prefix: str, *, newest_first: bool = True
+    ) -> list[tuple[str, datetime]]:
         base = self._path(prefix)
         if not base.exists():
             return []
         if base.is_file():
-            return [_safe_key(prefix)]
-        items: list[tuple[str, float]] = []
+            try:
+                ts = datetime.fromtimestamp(base.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                ts = datetime.min.replace(tzinfo=timezone.utc)
+            return [(_safe_key(prefix), ts)]
+        items: list[tuple[str, datetime]] = []
         for path in base.rglob("*.json"):
             rel = path.relative_to(self._root).as_posix()
             try:
-                mtime = path.stat().st_mtime
+                ts = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
             except OSError:
-                mtime = 0.0
-            items.append((rel, mtime))
+                ts = datetime.min.replace(tzinfo=timezone.utc)
+            items.append((rel, ts))
         items.sort(key=lambda pair: pair[1], reverse=newest_first)
-        return [rel for rel, _ in items]
+        return items
 
 
 class AzureBlobDataStorage(DataStorage):
@@ -142,7 +159,7 @@ class AzureBlobDataStorage(DataStorage):
             return json.loads(raw)
         except self._missing:
             return None
-        except (json.JSONDecodeError, OSError) as exc:
+        except Exception as exc:
             logger.warning("Could not read blob %s: %s", key, exc)
             return None
 
@@ -165,10 +182,17 @@ class AzureBlobDataStorage(DataStorage):
     def list_keys(self, prefix: str) -> list[str]:
         return self.list_keys_by_mtime(prefix, newest_first=False)
 
-    def list_keys_by_mtime(self, prefix: str, *, newest_first: bool = True) -> list[str]:
+    def list_keys_with_mtime(
+        self, prefix: str, *, newest_first: bool = True
+    ) -> list[tuple[str, datetime]]:
         blob_prefix = self._blob_name(prefix).rstrip("/") + "/"
         items: list[tuple[str, datetime]] = []
-        for item in self._container.list_blobs(name_starts_with=blob_prefix):
+        try:
+            blobs = self._container.list_blobs(name_starts_with=blob_prefix)
+        except Exception as exc:
+            logger.warning("Could not list blobs under %s: %s", prefix, exc)
+            return []
+        for item in blobs:
             name = item.name
             if not name.endswith(".json"):
                 continue
@@ -181,7 +205,7 @@ class AzureBlobDataStorage(DataStorage):
                 modified = modified.replace(tzinfo=timezone.utc)
             items.append((name, modified))
         items.sort(key=lambda pair: pair[1], reverse=newest_first)
-        return [name for name, _ in items]
+        return items
 
 
 _storage: DataStorage | None = None

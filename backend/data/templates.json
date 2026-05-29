@@ -1,0 +1,30 @@
+[
+  {
+    "id": "tpl_rag",
+    "name": "RAG Pipeline",
+    "description": "Query → retrieve from knowledge base → generate answer",
+    "category": "Knowledge",
+    "agents": ["query-transformer", "retrieval", "answer-gen"]
+  },
+  {
+    "id": "tpl_sql",
+    "name": "Text-to-SQL",
+    "description": "Natural language question → SQL → structured answer",
+    "category": "Analytics",
+    "agents": ["query-transformer", "text-to-sql", "answer-gen"]
+  },
+  {
+    "id": "tpl_router",
+    "name": "Multi-Agent Router",
+    "description": "Classify intent and route to specialized agents",
+    "category": "Orchestration",
+    "agents": ["router", "tool", "mcp"]
+  },
+  {
+    "id": "tpl_support",
+    "name": "Customer Support",
+    "description": "Triage → retrieve policy → draft response",
+    "category": "Support",
+    "agents": ["router", "retrieval", "answer-gen", "email-gen"]
+  }
+]

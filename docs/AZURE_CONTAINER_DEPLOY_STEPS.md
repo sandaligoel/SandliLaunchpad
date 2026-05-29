@@ -428,4 +428,4 @@ curl -s "https://YOUR_FQDN/health"
 ## Related docs
 
 - Shorter reference: [AZURE_BACKEND.md](./AZURE_BACKEND.md)
-- Local UI + API: [CONNECTIVITY.md](./CONNECTIVITY.md)
+- Local UI + API: [EMPLOYEE_SETUP.md](./EMPLOYEE_SETUP.md)

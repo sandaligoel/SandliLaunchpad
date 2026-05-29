@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# Prepare local dev: sync UI ports, verify Azure-backed API is reachable.
+# Prepare local dev: sync UI ports, verify AFFINE API is reachable.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=ports.sh
 source "$ROOT/scripts/ports.sh"
 
 echo "=== AFFINE dev stack ==="
-echo "Ports (config/dev-ports.json):"
+echo "Ports (config/runtime-ports.json):"
 echo "  Backend API ${AFFINE_API_TARGET}"
-echo "  Mock API    ${MOCK_API_TARGET}"
 echo "  Frontend    ${UI_URL}"
 echo ""
 
@@ -37,7 +36,6 @@ fi
 
 echo ""
 echo "Then:"
-echo "  Terminal 2 (optional): ./scripts/start-mock-api.sh"
-echo "  Terminal 3:            cd frontend && npm run dev"
+echo "  cd frontend && npm run dev"
 echo ""
 echo "Open: ${UI_URL}/interview"

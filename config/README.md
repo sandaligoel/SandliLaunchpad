@@ -1,21 +1,20 @@
 # Local dev ports
 
-**Single source of truth:** `dev-ports.json`
+**Defaults:** [dev-ports.json](dev-ports.json) (API **8003**, UI **5173**)
 
-| Service | Port |
-|---------|------|
-| Backend API (`backend/`) | **8003** |
-| Mock API (`mock-api/`) | **3001** |
-| Frontend (`frontend/`) | **5173** |
+**Active ports:** `runtime-ports.json` (gitignored). If a default port is busy, the next free port is chosen and written here so backend and frontend stay aligned.
 
 ```bash
-./scripts/sync-dev-env.sh   # writes frontend/.env.local
+./scripts/allocate-ports.sh   # refresh runtime-ports.json
+./scripts/sync-dev-env.sh     # writes frontend/.env.local
+./scripts/doctor.sh           # verify API + UI
 ```
 
-Start commands:
+Start order:
 
 ```bash
 ./scripts/start-backend.sh
-./scripts/start-mock-api.sh
 cd frontend && npm run dev
 ```
+
+Vite proxies `/api` and `/health` to the API port in `runtime-ports.json` (not `.env.development`).

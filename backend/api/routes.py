@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from api import builder_store, session_store
 from config import get_settings
@@ -16,6 +18,14 @@ from services.architecture_remediation import apply_remediation, revalidate_plan
 from schemas.agent_record import AgentRecord
 from services.catalog_interview_context import load_all_catalog_agents
 from services.data_storage import storage_backend_name
+from services.dashboard_service import (
+    get_agent_usage,
+    get_dashboard_stats,
+    get_recent_activity,
+    get_runs_over_time,
+    get_top_workflows,
+    load_templates,
+)
 from services.interview import run_interview_turn, start_session
 
 router = APIRouter(prefix="/api")
@@ -82,17 +92,19 @@ def list_catalog_agents() -> CatalogAgentsResponse:
 
 
 @router.post("/sessions", response_model=SessionResponse)
-def create_session(body: StartSessionRequest) -> SessionResponse:
+async def create_session(body: StartSessionRequest) -> SessionResponse:
     """Start a smart interview from the user's problem statement."""
     settings = get_settings()
     try:
-        session = start_session(body.problem_statement, settings)
+        session = await run_in_threadpool(
+            start_session, body.problem_statement, settings
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Interview start failed: {exc}") from exc
 
-    session_store.save(session)
+    await run_in_threadpool(session_store.save, session)
     return SessionResponse(session=session)
 
 
@@ -122,9 +134,9 @@ def get_session(session_id: str) -> SessionResponse:
 
 
 @router.post("/sessions/{session_id}/turn", response_model=SessionResponse)
-def submit_turn(session_id: str, body: TurnRequest) -> SessionResponse:
+async def submit_turn(session_id: str, body: TurnRequest) -> SessionResponse:
     """Submit an answer to the current question and advance the interview."""
-    session = session_store.get(session_id)
+    session = await run_in_threadpool(session_store.get, session_id)
     if session is None:
         raise HTTPException(
             status_code=404,
@@ -140,16 +152,15 @@ def submit_turn(session_id: str, body: TurnRequest) -> SessionResponse:
 
     settings = get_settings()
     try:
-        session = run_interview_turn(session, settings, user_answer=body.answer)
+        session = await run_in_threadpool(
+            partial(run_interview_turn, session, settings, user_answer=body.answer)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Interview turn failed: {exc}") from exc
 
-    # Fast response path: keep turn-to-turn updates in memory, persist fully
-    # only when interview reaches sufficient/ready milestones.
-    is_milestone = session.spec.status == "ready"
-    session_store.save(session, lightweight=not is_milestone)
+    await run_in_threadpool(session_store.save, session)
     return SessionResponse(session=session)
 
 
@@ -157,7 +168,7 @@ def submit_turn(session_id: str, body: TurnRequest) -> SessionResponse:
     "/sessions/{session_id}/architecture",
     response_model=ArchitectureResponse,
 )
-def generate_architecture(
+async def generate_architecture(
     session_id: str,
     force: bool = False,
 ) -> ArchitectureResponse:
@@ -167,7 +178,7 @@ def generate_architecture(
     Requires spec status ``sufficient`` or ``ready``. Caches plan on the session
     unless ``force=true``.
     """
-    session = session_store.get(session_id)
+    session = await run_in_threadpool(session_store.get, session_id)
     if session is None:
         raise HTTPException(
             status_code=404,
@@ -191,7 +202,7 @@ def generate_architecture(
 
     settings = get_settings()
     try:
-        plan = plan_architecture(session, settings)
+        plan = await run_in_threadpool(plan_architecture, session, settings)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -201,7 +212,7 @@ def generate_architecture(
         ) from exc
 
     session.architecture_plan = plan
-    session_store.save(session)
+    await run_in_threadpool(session_store.save, session)
     return ArchitectureResponse(session_id=session_id, plan=plan)
 
 
@@ -384,6 +395,37 @@ def save_builder_workflow(
     builder_store.save_workflow(session_id, body)
     loaded = builder_store.load_workflow(session_id)
     return BuilderWorkflowResponse(workflow=loaded or body)
+
+
+@router.get("/templates")
+def list_templates() -> list[dict]:
+    """Curated workflow templates (server catalog, not mock API)."""
+    return load_templates()
+
+
+@router.get("/dashboard/stats")
+def dashboard_stats() -> dict:
+    return get_dashboard_stats()
+
+
+@router.get("/dashboard/runs-over-time")
+def dashboard_runs_over_time() -> list[dict]:
+    return get_runs_over_time()
+
+
+@router.get("/dashboard/agent-usage")
+def dashboard_agent_usage() -> list[dict]:
+    return get_agent_usage()
+
+
+@router.get("/dashboard/recent-runs")
+def dashboard_recent_runs() -> list[dict]:
+    return get_recent_activity()
+
+
+@router.get("/dashboard/top-workflows")
+def dashboard_top_workflows() -> list[dict]:
+    return get_top_workflows()
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

@@ -51,7 +51,7 @@ ARCHITECTURE_FIELD_ORDER: tuple[str, ...] = tuple(
     k for k, _ in ARCHITECTURE_FIELD_DEFINITIONS
 )
 
-# Only these are asked in the chat (non-technical users).
+# Plain-language chat topics (ordered). Technical slots (latency, model, etc.) stay inferred.
 USER_INTERVIEW_REQUIREMENT_KEYS: tuple[str, ...] = (
     "hitl_behavior",
     "integrations",
@@ -63,7 +63,9 @@ INFERRED_REQUIREMENT_KEYS: tuple[str, ...] = tuple(
 
 USER_INTERVIEW_ARCHITECTURE_KEYS: tuple[str, ...] = (
     "architectural_flow",
+    "data_flow",
     "core_components",
+    "orchestration_model",
 )
 INFERRED_ARCHITECTURE_KEYS: tuple[str, ...] = tuple(
     k for k, _ in ARCHITECTURE_FIELD_DEFINITIONS
@@ -80,6 +82,11 @@ SUFFICIENT_REQUIREMENT_KEYS: tuple[str, ...] = USER_INTERVIEW_REQUIREMENT_KEYS
 SPEC_FIELD_DEFINITIONS: list[tuple[str, str]] = (
     REQUIREMENTS_FIELD_DEFINITIONS + ARCHITECTURE_FIELD_DEFINITIONS
 )
+
+_label_by_key = dict(SPEC_FIELD_DEFINITIONS)
+USER_INTERVIEW_FIELD_LABELS: dict[str, str] = {
+    k: _label_by_key[k] for k in USER_INTERVIEW_FIELD_KEYS
+}
 
 REQUIRED_FIELD_KEYS: tuple[str, ...] = tuple(k for k, _ in SPEC_FIELD_DEFINITIONS)
 
@@ -112,6 +119,8 @@ class GraphNode(BaseModel):
     type: Literal["agent", "custom", "gateway", "human"] = "custom"
     agent_id: Optional[str] = None
     description: Optional[str] = None
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
 
 
 class GraphEdge(BaseModel):
@@ -284,9 +293,15 @@ class InterviewQuestion(BaseModel):
     """Assistant turn: one focused question with chip options."""
 
     field_key: str
+    """Plain label for the single topic this turn is about (shown in UI)."""
+    topic_label: Optional[str] = None
     question: str
     chips: list[str] = Field(default_factory=list)
     why_it_matters: Optional[str] = None
+    """Closest catalog-backed chip (usually chips[0] after merge)."""
+    suggested_chip: Optional[str] = None
+    catalog_reference: Optional[str] = None
+    suggestion_reason: Optional[str] = None
 
 
 class InterviewSession(BaseModel):
@@ -300,8 +315,10 @@ class InterviewSession(BaseModel):
     architecture_plan: Optional["ArchitecturePlan"] = None
     clarifying_questions: list[ClarifyingQuestionItem] = Field(default_factory=list)
     clarifying_answers: dict[str, str] = Field(default_factory=dict)
+    agent_workflow: Optional["AgentWorkflowState"] = None
 
 
+from schemas.agent_workflow import AgentWorkflowState  # noqa: E402
 from schemas.architecture_plan import ArchitecturePlan  # noqa: E402
 
 InterviewSession.model_rebuild()

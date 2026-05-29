@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
 
 from config import Settings
-from pipeline.spec_loader import load_catalog_json
-from schemas.agent_record import AgentRecord, slugify
+from pipeline.spec_loader import CatalogLoadResult, load_catalog_json
+from schemas.agent_record import AgentRecord, ProjectRecord, slugify
 from schemas.architecture_spec import CatalogHint
 from services.catalog_hints import fetch_catalog_hints
 
@@ -27,15 +28,19 @@ def load_all_catalog_agents(settings: Settings) -> list[AgentRecord]:
     return sorted(agents, key=lambda a: (a.category, a.name.lower()))
 
 
-def _load_spec_agents(settings: Settings) -> list[AgentRecord]:
+def _load_catalog(settings: Settings) -> CatalogLoadResult:
     path = _catalog_path(settings)
     if not path.is_file() or path.suffix.lower() != ".json":
-        return []
+        return CatalogLoadResult()
     try:
-        return load_catalog_json(path).agents
+        return load_catalog_json(path)
     except Exception as exc:
         logger.warning("Could not load spec.json for interview context: %s", exc)
-        return []
+        return CatalogLoadResult()
+
+
+def _load_spec_agents(settings: Settings) -> list[AgentRecord]:
+    return _load_catalog(settings).agents
 
 
 def _tokens(text: str) -> set[str]:
@@ -93,6 +98,7 @@ def build_catalog_hints_for_interview(
     settings: Settings,
     *,
     top_k: int = 8,
+    preferred_agent_ids: list[str] | None = None,
 ) -> list[CatalogHint]:
     """
     Hybrid catalog context: Azure Search when available, always enriched from spec.json.
@@ -100,11 +106,18 @@ def build_catalog_hints_for_interview(
     text = (query or "").strip()
     all_agents = _load_spec_agents(settings)
     by_id = _agent_by_id(all_agents)
-
-    search_hints = fetch_catalog_hints(text, settings, top_k=top_k) if len(text) >= 20 else []
+    preferred = set(preferred_agent_ids or [])
 
     merged: list[CatalogHint] = []
     seen: set[str] = set()
+
+    for aid in preferred:
+        agent = by_id.get(aid)
+        if agent and agent.id not in seen:
+            seen.add(agent.id)
+            merged.append(_hint_from_agent(agent, 0.95))
+
+    search_hints = fetch_catalog_hints(text, settings, top_k=top_k) if len(text) >= 20 else []
 
     for h in search_hints:
         key = h.agent_id or slugify(h.name)
@@ -142,6 +155,210 @@ def build_catalog_hints_for_interview(
     return merged[:top_k]
 
 
+def _project_score(query: str, project: ProjectRecord, agents: list[AgentRecord]) -> float:
+    blob = " ".join(
+        [
+            project.name,
+            project.client,
+            project.business_problem,
+            project.solution_summary,
+            project.outcomes or "",
+            " ".join(project.tech_stack),
+        ]
+    )
+    for agent in agents:
+        if agent.origin_project == project.name:
+            blob += " " + " ".join(
+                [
+                    agent.name,
+                    agent.function_summary,
+                    " ".join(agent.integrations),
+                ]
+            )
+    q = _tokens(query)
+    p = _tokens(blob)
+    if not q or not p:
+        return 0.0
+    return len(q & p) / max(len(q), 1)
+
+
+def _truncate(text: str, limit: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rsplit(" ", 1)[0] + "…"
+
+
+def format_catalog_brief_for_interview(
+    query: str,
+    settings: Settings,
+    *,
+    top_projects: int = 2,
+    agents_per_project: int = 8,
+    preferred_agent_ids: list[str] | None = None,
+) -> str:
+    """
+    Project-first catalog brief for catalog_pattern_interview.txt.
+
+    Ranks spec.json projects by keyword fit, then lists agents in catalog order
+    with inputs, outputs, and integrations.
+    """
+    catalog = _load_catalog(settings)
+    if not catalog.projects and not catalog.agents:
+        return format_catalog_for_interview_prompt([])
+
+    preferred = set(preferred_agent_ids or [])
+    agents_by_project: dict[str, list[AgentRecord]] = {}
+    for agent in catalog.agents:
+        key = agent.origin_project or "unknown"
+        agents_by_project.setdefault(key, []).append(agent)
+
+    entries: list[tuple[ProjectRecord, list[AgentRecord], float]] = []
+    for project in catalog.projects:
+        project_agents = agents_by_project.get(project.name, [])[:agents_per_project]
+        if not project_agents:
+            continue
+        score = _project_score(query, project, project_agents)
+        if preferred:
+            score += 0.15 * sum(1 for a in project_agents if a.id in preferred)
+        entries.append((project, project_agents, score))
+
+    entries.sort(key=lambda x: x[2], reverse=True)
+    top = entries[:top_projects]
+
+    lines = ["REFERENCE PROJECTS (spec.json, ranked by fit):", ""]
+    if not top:
+        return format_catalog_for_interview_prompt(
+            build_catalog_hints_for_interview(query, settings, top_k=8)
+        )
+
+    for rank, (project, agents, score) in enumerate(top, 1):
+        lines.append(f"{rank}. {project.name} — {project.vertical}")
+        if project.client:
+            lines.append(f"   Client: {project.client}")
+        lines.append(f"   Fit score: {score:.2f}")
+        lines.append(
+            f"   Problem: {_truncate(project.business_problem, 280)}"
+        )
+        lines.append(
+            f"   Solution pattern: {_truncate(project.solution_summary, 320)}"
+        )
+        if project.outcomes:
+            lines.append(f"   Outcomes: {_truncate(str(project.outcomes), 200)}")
+        lines.append("   Agents (typical pipeline order):")
+        for agent in agents:
+            ins = ", ".join(agent.inputs[:4]) if agent.inputs else "—"
+            outs = ", ".join(agent.outputs[:4]) if agent.outputs else "—"
+            ints = ", ".join(agent.integrations[:5]) if agent.integrations else "—"
+            lines.append(f"   - {agent.name} [{agent.category}] id={agent.id}")
+            lines.append(f"     Does: {_truncate(agent.function_summary, 200)}")
+            lines.append(f"     In: {_truncate(ins, 120)} | Out: {_truncate(outs, 120)}")
+            lines.append(f"     Integrations: {_truncate(ints, 100)}")
+            if agent.notes:
+                lines.append(f"     Notes: {_truncate(agent.notes, 120)}")
+        lines.append("")
+
+    lines.append("USER PROBLEM (match patterns above):")
+    lines.append(_truncate(query, 500))
+    return "\n".join(lines).strip()
+
+
+def _dedupe_preserve(items: list[str], limit: int = 24) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in items:
+        text = (raw or "").strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def format_matched_agents_context(
+    hints: list[CatalogHint],
+    settings: Settings,
+) -> dict[str, str]:
+    """
+    Build placeholder values for catalog_pattern_interview.txt from catalog hints
+    and full agent records in spec.json.
+    """
+    catalog = _load_catalog(settings)
+    by_id = _agent_by_id(catalog.agents)
+
+    matched: list[dict] = []
+    all_inputs: list[str] = []
+    all_outputs: list[str] = []
+    tech: list[str] = []
+    models: list[str] = []
+    notes: list[str] = []
+
+    for h in hints[:8]:
+        agent = by_id.get(h.agent_id) or by_id.get(slugify(h.name))
+        entry = {
+            "agent_id": h.agent_id,
+            "name": h.name,
+            "category": h.category,
+            "origin_project": h.origin_project or "",
+            "origin_client": h.origin_client or "",
+            "function_summary": (h.function_summary or "")[:320],
+            "score": round(h.score, 3),
+        }
+        if agent:
+            entry["inputs"] = agent.inputs[:6]
+            entry["outputs"] = agent.outputs[:6]
+            entry["integrations"] = agent.integrations[:6]
+            entry["tech_stack"] = agent.tech_stack[:6]
+            entry["model_used"] = agent.model_used or ""
+            if agent.notes:
+                entry["notes"] = agent.notes
+            all_inputs.extend(agent.inputs)
+            all_outputs.extend(agent.outputs)
+            tech.extend(agent.integrations)
+            tech.extend(agent.tech_stack)
+            if agent.model_used and agent.model_used != "Unknown":
+                models.append(f"{agent.name}: {agent.model_used}")
+            if agent.notes:
+                notes.append(f"{agent.name}: {agent.notes}")
+        elif h.integrations:
+            tech.extend([s.strip() for s in h.integrations.split(",") if s.strip()])
+        if h.model_used:
+            models.append(f"{h.name}: {h.model_used}")
+        matched.append(entry)
+
+    if not matched and hints:
+        matched = [
+            {
+                "agent_id": h.agent_id,
+                "name": h.name,
+                "category": h.category,
+                "function_summary": (h.function_summary or "")[:320],
+                "score": round(h.score, 3),
+            }
+            for h in hints[:8]
+        ]
+
+    tech_deduped = _dedupe_preserve(tech, 20)
+    return {
+        "matched_agents_json": json.dumps(matched, indent=2) if matched else "[]",
+        "inputs_from_matched_agents": ", ".join(_dedupe_preserve(all_inputs, 16))
+        or "(none listed — infer from problem statement)",
+        "outputs_from_matched_agents": ", ".join(_dedupe_preserve(all_outputs, 16))
+        or "(none listed — infer from problem statement)",
+        "tech_stack_and_integrations": ", ".join(tech_deduped)
+        or "(none listed)",
+        "model_breakdown": "; ".join(_dedupe_preserve(models, 10))
+        or "(not specified in catalog)",
+        "notes_from_matched_agents": "; ".join(_dedupe_preserve(notes, 8))
+        or "(none)",
+    }
+
+
 def format_catalog_for_interview_prompt(hints: list[CatalogHint]) -> str:
     """Rich block for LLM prompts — keeps spec.json agents in mind."""
     if not hints:
@@ -151,7 +368,7 @@ def format_catalog_for_interview_prompt(hints: list[CatalogHint]) -> str:
         )
 
     lines = [
-        "AFFINE BUILT AGENTS (data/spec.json). Prefer reuse; name these in questions and chips when relevant.",
+        "AFFINE BUILT AGENTS (data/spec.json). Ground requirements and architecture questions in these capabilities; chips may reflect similar patterns without naming agents unless the user already did.",
         "",
     ]
     for i, h in enumerate(hints, 1):

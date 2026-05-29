@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 WORKFLOW_INDEX_KEY = "workflows/_index.json"
 
 
+def _entry_has_plan(entry: dict[str, Any]) -> bool:
+    """Workflows list only includes sessions with a non-empty architecture graph."""
+    if not entry.get("hasPlan"):
+        return False
+    try:
+        return int(entry.get("stepCount") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _filter_planned(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [e for e in entries if _entry_has_plan(e)]
+
+
 def _workflow_key(session_id: str) -> str:
     safe = session_id.replace("/", "_").replace("..", "_")
     return f"workflows/{safe}.json"
@@ -35,22 +49,31 @@ def delete_workflow(session_id: str) -> bool:
 
 
 def _index_from_sessions() -> list[dict[str, Any]]:
-    """Build workflow list from interview sessions when no index file exists yet."""
+    """Sessions with a non-empty architecture graph (when no workflow blobs exist)."""
     from api import session_store
 
     entries: list[dict[str, Any]] = []
-    for row in session_store.list_session_summaries(limit=30):
+    for row in session_store.list_session_summaries(limit=50):
+        if not row.get("has_architecture_plan"):
+            continue
         sid = row["id"]
+        session = session_store.get(sid)
+        if session is None or session.architecture_plan is None:
+            continue
+        nodes = session.architecture_plan.graph.nodes or []
+        if not nodes:
+            continue
         ps = str(row.get("problem_statement") or "").strip()
         title = ps[:72] + ("…" if len(ps) > 72 else "") if ps else f"Launchpad {sid[:8]}"
+        plan = session.architecture_plan
         entries.append(
             {
                 "sessionId": sid,
                 "title": title,
                 "savedAt": "",
-                "stepCount": 0,
-                "agentCount": 0,
-                "hasPlan": bool(row.get("has_architecture_plan")),
+                "stepCount": len(nodes),
+                "agentCount": len(plan.reuse_decisions) or len(nodes),
+                "hasPlan": True,
             }
         )
     return entries
@@ -65,8 +88,8 @@ def _sort_workflow_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def rebuild_workflow_index() -> int:
-    """Rebuild workflows/_index.json from all workflow blobs (newest first)."""
-    entries = _sort_workflow_entries(_index_from_blob_workflows())
+    """Rebuild workflows/_index.json from workflow blobs that have a plan (newest first)."""
+    entries = _sort_workflow_entries(_filter_planned(_index_from_blob_workflows()))
     if not entries:
         entries = _sort_workflow_entries(_index_from_sessions())
     get_data_storage().write_json(
@@ -81,18 +104,20 @@ def list_workflow_index() -> list[dict[str, Any]]:
     if raw:
         entries = raw.get("entries")
         if isinstance(entries, list) and entries:
-            return _sort_workflow_entries(entries)
-    blob_entries = _index_from_blob_workflows()
+            return _sort_workflow_entries(_filter_planned(entries))
+    blob_entries = _filter_planned(_index_from_blob_workflows())
     if blob_entries:
         return _sort_workflow_entries(blob_entries)
     return _sort_workflow_entries(_index_from_sessions())
 
 
-def _index_from_blob_workflows() -> list[dict[str, Any]]:
+def _index_from_blob_workflows(*, max_items: int = 60) -> list[dict[str, Any]]:
     storage = get_data_storage()
     keys = storage.list_keys_by_mtime("workflows", newest_first=True)
     entries: list[dict[str, Any]] = []
     for key in keys:
+        if len(entries) >= max_items:
+            break
         if key == "workflows/_index.json" or not key.endswith(".json"):
             continue
         session_id = key.split("/")[-1].replace(".json", "")
@@ -102,6 +127,8 @@ def _index_from_blob_workflows() -> list[dict[str, Any]]:
         plan = doc.get("plan") or {}
         graph = plan.get("graph") or {}
         nodes = graph.get("nodes") or []
+        if not isinstance(nodes, list) or len(nodes) == 0:
+            continue
         title = (
             (doc.get("title") or "").strip()
             or (doc.get("problemStatement") or "").strip()[:72]
@@ -112,9 +139,9 @@ def _index_from_blob_workflows() -> list[dict[str, Any]]:
                 "sessionId": session_id,
                 "title": title[:72] + ("…" if len(title) > 72 else ""),
                 "savedAt": doc.get("savedAt") or "",
-                "stepCount": len(nodes) if isinstance(nodes, list) else 0,
+                "stepCount": len(nodes),
                 "agentCount": len(plan.get("reuse_decisions") or nodes),
-                "hasPlan": bool(nodes),
+                "hasPlan": True,
             }
         )
     return entries
@@ -124,6 +151,9 @@ def _upsert_index_entry(session_id: str, document: dict[str, Any]) -> None:
     plan = document.get("plan") or {}
     graph = plan.get("graph") or {}
     nodes = graph.get("nodes") or []
+    if not isinstance(nodes, list) or len(nodes) == 0:
+        _remove_index_entry(session_id)
+        return
     title = (
         (document.get("title") or "").strip()
         or (document.get("problemStatement") or "").strip()[:72]
@@ -137,9 +167,16 @@ def _upsert_index_entry(session_id: str, document: dict[str, Any]) -> None:
         "agentCount": len(plan.get("reuse_decisions") or nodes),
         "hasPlan": bool(nodes),
     }
-    entries = [e for e in list_workflow_index() if e.get("sessionId") != session_id]
+    entries = [
+        e
+        for e in list_workflow_index()
+        if e.get("sessionId") != session_id
+    ]
     entries.insert(0, entry)
-    get_data_storage().write_json(WORKFLOW_INDEX_KEY, {"entries": entries})
+    get_data_storage().write_json(
+        WORKFLOW_INDEX_KEY,
+        {"entries": _filter_planned(entries)},
+    )
 
 
 def _remove_index_entry(session_id: str) -> None:

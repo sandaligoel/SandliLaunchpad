@@ -29,7 +29,7 @@ AZURE_STORAGE_ACCOUNT_KEY=<key from Azure Portal → Storage account → Access 
 # or omit both and use `az login` (DefaultAzureCredential) if your user has Storage Blob Data Contributor
 ```
 
-On startup, `./scripts/start-affine-api.sh` prints whether Blob is reachable and how many sessions exist.
+On startup, `./scripts/start-backend.sh` prints whether Blob is reachable and how many sessions exist.
 
 The UI **Agent Launchpad** page lists **Continue a previous interview** from `GET /api/sessions` (reads the container). Opening **Workflow Builder** or **Workflows** loads canvas data from `launchpad/workflows/` in the same container.
 
@@ -38,7 +38,7 @@ Install the new dependency and restart the API:
 ```bash
 cd backend
 .venv/bin/pip install azure-storage-blob
-./scripts/start-affine-api.sh   # or your usual uvicorn command
+./scripts/start-backend.sh
 ```
 
 On startup you should see a log line like: `Data storage: Azure Blob account=affineblog container=agentic-launchpad prefix=launchpad`.
@@ -54,7 +54,7 @@ export AZURE_STORAGE_CONTAINER_NAME=agentic-launchpad
 PYTHONPATH=. .venv/bin/python ../scripts/migrate-local-to-blob.py
 ```
 
-Workflows that only exist in **browser localStorage** are uploaded the next time you open the builder (auto-save syncs to `PUT /api/sessions/{id}/builder`).
+Launchpad no longer caches workflows in the browser. Use `scripts/migrate-local-to-blob.py` to upload legacy `data/sessions/` or disk mirror files if needed.
 
 ## Portal link
 

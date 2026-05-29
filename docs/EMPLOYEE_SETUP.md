@@ -56,34 +56,22 @@ npm run dev --prefix frontend
 
 Open **http://localhost:5173/interview**
 
-`sync-dev-env.sh` writes `frontend/.env.local` so the UI proxies to port **8003**.
+`sync-dev-env.sh` writes `frontend/.env.local` to match `config/runtime-ports.json`.
 
-## 4. Mock API (optional — Dashboard only)
-
-Launchpad (**Interview**, **Builder**, **Workflows**) uses the **backend** only.
-
-The **Dashboard** and **Templates** pages need the mock API:
-
-```bash
-./scripts/start-mock-api.sh
-```
-
-## 5. Daily workflow
+## 4. Daily workflow
 
 | Terminal | Command |
 |----------|---------|
 | 1 | `./scripts/start-backend.sh` |
-| 2 | `./scripts/start-mock-api.sh` *(optional)* |
-| 3 | `cd frontend && npm run dev` |
+| 2 | `cd frontend && npm run dev` |
 
 Check everything:
 
 ```bash
-./scripts/dev-up.sh
-./scripts/verify-backend-e2e.sh
+./scripts/doctor.sh
 ```
 
-## 6. Main URLs
+## 5. Main URLs
 
 | Page | Path |
 |------|------|
@@ -91,9 +79,9 @@ Check everything:
 | Workflow builder | `/builder` |
 | Saved workflows | `/workflows` |
 | Agent library | `/agents` |
-| Dashboard | `/` *(needs mock API)* |
+| Dashboard | `/dashboard` |
 
-## 7. Catalog index (first time only)
+## 6. Catalog index (first time only)
 
 If interview does not show catalog hints:
 
@@ -105,12 +93,12 @@ python -m pipeline.run --source ./data/spec.json
 
 ## Common issues
 
-- **Red banner “Cannot reach AFFINE API”** — backend not running or wrong port; run `./scripts/sync-dev-env.sh` and restart frontend.
-- **Dashboard proxy errors (3001)** — start `./scripts/start-mock-api.sh` or ignore if you only use Launchpad.
+- **Red banner “Cannot reach AFFINE API”** — run `./scripts/doctor.sh`; start backend; run `./scripts/sync-dev-env.sh` and restart `npm run dev`.
+- **Proxy errors (ECONNREFUSED)** — UI port does not match backend; restart both after `sync-dev-env.sh`.
 - **Sessions not shared with team** — ensure `DATA_STORAGE_BACKEND=blob` and Azure storage credentials in `backend/.env`.
 
 ## More documentation
 
 - [WHAT_TO_SHARE.md](./WHAT_TO_SHARE.md) — credentials checklist for leads
-- [BACKEND_E2E_SETUP.md](./BACKEND_E2E_SETUP.md) — deeper backend checks
+- [STORAGE_ARCHITECTURE.md](./STORAGE_ARCHITECTURE.md) — API + persistence
 - [CONNECT_AZURE_BACKEND.md](./CONNECT_AZURE_BACKEND.md) — deployed API

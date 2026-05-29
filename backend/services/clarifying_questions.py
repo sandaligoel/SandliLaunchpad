@@ -30,6 +30,8 @@ def generate_clarifying_questions(
     raw_query: str,
     settings: Settings,
     client: AzureOpenAI | None = None,
+    *,
+    catalog_context: str = "",
 ) -> list[ClarifyingQuestionItem]:
     """
     Ask the LLM for 1–5 architecture-shaping clarifying questions.
@@ -44,10 +46,15 @@ def generate_clarifying_questions(
     if client is None:
         client = make_client(settings)
 
-    system = load_prompt("clarifying_questions.txt").replace("{raw_query}", statement)
+    catalog = (catalog_context or "").strip() or "(No catalog agents loaded.)"
+    system = (
+        load_prompt("clarifying_questions.txt")
+        .replace("{raw_query}", statement)
+        .replace("{catalog_context}", catalog)
+    )
     user = (
         "Return the JSON object with only the clarifying questions needed "
-        "(between 1 and 5)."
+        "(between 1 and 5), each tied to spec.json agent capabilities."
     )
 
     raw = call_llm(

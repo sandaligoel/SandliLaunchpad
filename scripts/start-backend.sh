@@ -3,6 +3,13 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=ports.sh
 source "$ROOT/scripts/ports.sh"
+if curl -sf -m 2 "${AFFINE_API_TARGET}/health" >/dev/null 2>&1; then
+  echo "AFFINE API already running → ${AFFINE_API_TARGET}"
+  "$ROOT/scripts/sync-dev-env.sh"
+  exit 0
+fi
+"$ROOT/scripts/allocate-ports.sh"
+source "$ROOT/scripts/ports.sh"
 API_PORT="$AFFINE_API_PORT"
 
 cd "$ROOT/backend"
@@ -24,7 +31,8 @@ source .venv/bin/activate
 # Do not `source .env` — semicolons in connection strings break bash. Python loads .env via dotenv.
 
 echo "AFFINE API → ${AFFINE_API_TARGET}/health"
-echo "UI proxy target → ${AFFINE_API_TARGET} (config/dev-ports.json)"
+"$ROOT/scripts/sync-dev-env.sh"
+echo "Restart UI if open: cd frontend && npm run dev"
 
 PYTHONPATH=. python -c "
 from dotenv import load_dotenv

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import uuid
 from typing import Optional
@@ -17,6 +16,7 @@ from schemas.architecture_spec import (
     FIELD_GROUPS,
     USER_INTERVIEW_ARCHITECTURE_KEYS,
     USER_INTERVIEW_FIELD_KEYS,
+    USER_INTERVIEW_FIELD_LABELS,
     USER_INTERVIEW_REQUIREMENT_KEYS,
     ArchitectureSpec,
     CatalogHint,
@@ -28,8 +28,27 @@ from schemas.architecture_spec import (
     InterviewSession,
 )
 from services.answer_utils import is_custom_describe_placeholder
+from services.agent_workflow_interview import (
+    advance_agent_workflow_turn,
+    begin_agent_workflow_interview,
+    is_agent_input_field_key,
+)
+from services.catalog_chip_suggestions import (
+    _FIELD_EASE_SCORE,
+    build_chip_query_context,
+    catalog_suggestion_context,
+    easy_question_for_project,
+    merge_catalog_chips,
+    pick_suggested_chip,
+    recommend_first_interview_field,
+    suggestion_reason_for_field,
+    suggest_all_field_chips,
+    suggest_chips_for_field,
+    suggest_clarifying_chips,
+)
 from services.catalog_interview_context import (
     build_catalog_hints_for_interview,
+    format_catalog_brief_for_interview,
     format_catalog_for_interview_prompt,
 )
 from services.clarifying_questions import (
@@ -46,12 +65,6 @@ logger = logging.getLogger(__name__)
 
 RECENT_MESSAGE_LIMIT = 6
 DETAILED_FLOW_MIN_CHARS = 80
-FAST_INTERVIEW_MODE = os.getenv("INTERVIEW_FAST_MODE", "1").strip().lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
-)
 
 # Plain-language chip fallbacks when the model returns few options.
 _DEFAULT_CHIPS: dict[str, list[str]] = {
@@ -86,6 +99,18 @@ _DEFAULT_CHIPS: dict[str, list[str]] = {
         "Mostly automatic with one review step",
         "Other / describe in chat",
     ],
+    "data_flow": [
+        "Each step passes results directly to the next",
+        "One shared place every step reads and updates",
+        "Mix of handoffs and a central case record",
+        "Other / describe in chat",
+    ],
+    "orchestration_model": [
+        "Strict order — one step finishes before the next starts",
+        "Some steps can run in parallel when data is ready",
+        "A person starts each major step manually",
+        "Other / describe in chat",
+    ],
 }
 
 _FORBIDDEN_QUESTION_PHRASES = re.compile(
@@ -94,6 +119,37 @@ _FORBIDDEN_QUESTION_PHRASES = re.compile(
     re.I,
 )
 
+# One-line scope per topic (prompt + validation). Not a fixed question script.
+_TOPIC_FOCUS: dict[str, str] = {
+    "hitl_behavior": (
+        "hitl_behavior — Who must review or approve, and when (every case vs exceptions only)."
+    ),
+    "integrations": (
+        "integrations — Where work enters and where outputs must be sent (systems, files, email)."
+    ),
+    "architectural_flow": (
+        "architectural_flow — Step order from start to finish in their real process."
+    ),
+    "data_flow": (
+        "data_flow — How information moves between steps (handoffs vs one shared record)."
+    ),
+    "core_components": (
+        "core_components — Main blocks in plain words (intake, checks, review, report)."
+    ),
+    "orchestration_model": (
+        "orchestration_model — Automatic sequence, parallel steps, or manual triggers."
+    ),
+}
+
+_OTHER_TOPIC_CUES: dict[str, tuple[str, ...]] = {
+    "hitl_behavior": ("review", "approve", "analyst", "human", "sign-off", "sign off"),
+    "integrations": ("email", "crm", "database", "sharepoint", "salesforce", "upload"),
+    "architectural_flow": ("step order", "first", "then", "sequence", "pipeline", "end to end"),
+    "data_flow": ("handoff", "shared record", "passes to", "central store", "hand off"),
+    "core_components": ("main parts", "building blocks", "modules", "intake", "dashboard"),
+    "orchestration_model": ("parallel", "automatically", "manual trigger", "one by one"),
+}
+
 
 def _catalog_agent_names(spec: ArchitectureSpec) -> list[str]:
     hints = spec.catalog_hints or []
@@ -101,12 +157,9 @@ def _catalog_agent_names(spec: ArchitectureSpec) -> list[str]:
 
 
 def _sanitize_user_facing_text(text: str, spec: ArchitectureSpec) -> str:
-    """Remove internal catalog / vendor references from questions and chips."""
-    out = text
-    for name in _catalog_agent_names(spec):
-        if name:
-            out = re.sub(re.escape(name), "", out, flags=re.I)
-    out = _FORBIDDEN_QUESTION_PHRASES.sub("", out)
+    """Strip internal jargon from questions and chips (keep catalog agent names)."""
+    del spec
+    out = _FORBIDDEN_QUESTION_PHRASES.sub("", text)
     out = re.sub(r"\s{2,}", " ", out).strip(" ,—-")
     return out or text
 
@@ -137,6 +190,14 @@ def _fallback_question_for_field(
             f"For this work ({hook}), what are the main parts you need "
             "(for example intake, checks, review, final output)?"
         ),
+        "data_flow": (
+            f"For this work ({hook}), how should information move between steps — "
+            "handed step to step, or kept in one shared place?"
+        ),
+        "orchestration_model": (
+            f"For this work ({hook}), should steps run automatically in order, "
+            "in parallel when possible, or wait for someone to start them?"
+        ),
     }
     q = questions.get(
         field_key,
@@ -152,11 +213,57 @@ def _ensure_chips(field_key: str, chips: list[str]) -> list[str]:
     other = "Other / describe in chat"
     cleaned = [c for c in cleaned if c.lower() != other.lower()]
     if len(cleaned) < 3:
-        cleaned = list(_DEFAULT_CHIPS.get(field_key, _DEFAULT_CHIPS["use_case"]))
+        cleaned = list(_DEFAULT_CHIPS.get(field_key, _DEFAULT_CHIPS["hitl_behavior"]))
         cleaned = [c for c in cleaned if c.lower() != other.lower()]
     if not cleaned:
         cleaned = ["Option A", "Option B", "Option C"]
     return cleaned + [other]
+
+
+def _extract_question_options(question: str) -> list[str]:
+    """
+    Parse inline options from question text so UI can always show clickable chips.
+
+    Example:
+    "What invoice sources...: emailed PDFs/scans, ERP-exported, vendor portal, or a mix?"
+    """
+    text = (question or "").strip()
+    if not text:
+        return []
+
+    tail = text[:-1] if text.endswith("?") else text
+    match = re.search(r"[:\-\u2014]\s*([^?]+)$", tail)
+    if not match:
+        return []
+
+    option_blob = match.group(1).strip()
+    if not option_blob:
+        return []
+
+    option_blob = re.split(
+        r"\s*[\u2014\-]\s*and\s+",
+        option_blob,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    option_blob = re.split(
+        r"\s+and\s+(?:do|does|did|should|can|will|would)\b",
+        option_blob,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+    normalized = re.sub(r"\s+or\s+", ", ", option_blob, flags=re.IGNORECASE)
+    parts = [p.strip(" `\"'") for p in normalized.split(",")]
+    options = [p for p in parts if 2 <= len(p) <= 40]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for opt in options:
+        key = opt.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(opt)
+    return deduped[:4]
 
 
 def _format_transcript(messages: list[ChatMessage], limit: int | None = None) -> str:
@@ -313,28 +420,121 @@ def _user_field_complete(
     return key in _user_answered_fields(messages)
 
 
+def _topic_label(field_key: str) -> str:
+    return USER_INTERVIEW_FIELD_LABELS.get(
+        field_key,
+        field_key.replace("_", " ").strip(),
+    )
+
+
+def _open_interview_gaps(
+    spec: ArchitectureSpec,
+    messages: list[ChatMessage],
+) -> list[str]:
+    """Interview topics still missing a user answer (not a fixed script queue)."""
+    return [
+        key
+        for key in USER_INTERVIEW_FIELD_KEYS
+        if key in spec.fields and not _user_field_complete(spec, messages, key)
+    ]
+
+
+def _gap_context_score(
+    key: str,
+    spec: ArchitectureSpec,
+    messages: list[ChatMessage],
+) -> float:
+    """Rank which open gap is most useful next — context-based, not fixed order."""
+    blob = f"{spec.problem_statement} {spec.transcript_summary or ''}".lower()
+    for msg in reversed(messages):
+        if msg.role == "user" and msg.content.strip():
+            blob = f"{blob} {msg.content.lower()}"
+            break
+    score = 1.0
+    cues = {
+        "hitl_behavior": ("review", "approve", "analyst", "manual", "human"),
+        "integrations": ("email", "crm", "database", "upload", "system", "file"),
+        "architectural_flow": ("step", "order", "process", "workflow", "first", "then"),
+        "data_flow": ("handoff", "transfer", "record", "store", "shared"),
+        "core_components": ("part", "block", "intake", "module", "dashboard"),
+        "orchestration_model": ("parallel", "automatic", "trigger", "batch", "wait"),
+    }
+    for term in cues.get(key, ()):
+        if term in blob:
+            score += 1.25
+    score += _FIELD_EASE_SCORE.get(key, 1.0) * 0.35
+    if key in ("data_flow", "orchestration_model") and not _user_field_complete(
+        spec, messages, "architectural_flow"
+    ):
+        score -= 4.0
+    if key in _user_answered_fields(messages):
+        score -= 20.0
+    return score
+
+
+def _rank_open_gaps(
+    open_gaps: list[str],
+    spec: ArchitectureSpec,
+    messages: list[ChatMessage],
+) -> list[str]:
+    return sorted(
+        open_gaps,
+        key=lambda k: _gap_context_score(k, spec, messages),
+        reverse=True,
+    )
+
+
 def _pick_next_field_key(
     spec: ArchitectureSpec,
     messages: list[ChatMessage],
     last_answered_field: Optional[str],
-) -> str:
-    """
-    Ask only user-facing fields (no latency, accuracy, volume, model, deployment).
-    """
+    settings: Settings | None = None,
+) -> Optional[str]:
+    """Fallback when the model omits or hallucinates field_key — best open gap only."""
     del last_answered_field
+    gaps = _open_interview_gaps(spec, messages)
+    if not gaps:
+        return None
+    if _user_interview_answer_count(messages) == 0 and settings is not None:
+        return recommend_first_interview_field(spec, settings, gaps)
+    ranked = _rank_open_gaps(gaps, spec, messages)
+    return ranked[0] if ranked else None
 
-    for key in USER_INTERVIEW_REQUIREMENT_KEYS:
-        if key in spec.fields and not _user_field_complete(spec, messages, key):
-            return key
 
-    for key in USER_INTERVIEW_ARCHITECTURE_KEYS:
-        if key in spec.fields and not _user_field_complete(spec, messages, key):
-            return key
+def _resolve_field_key_for_turn(
+    parsed_field: str,
+    open_gaps: list[str],
+    spec: ArchitectureSpec,
+    messages: list[ChatMessage],
+    fallback_key: Optional[str],
+) -> Optional[str]:
+    """Accept model field_key only if it is an open gap; never invent topics."""
+    key = (parsed_field or "").strip()
+    if key in open_gaps:
+        return key
+    if fallback_key and fallback_key in open_gaps:
+        return fallback_key
+    ranked = _rank_open_gaps(open_gaps, spec, messages)
+    return ranked[0] if ranked else None
 
-    pending = spec.pending_user_interview_keys()
-    if pending:
-        return pending[0]
-    return None
+
+def _question_scope_ok(question: str, field_key: str) -> bool:
+    """Reject questions that clearly ask about a different open topic."""
+    q = question.lower()
+    current_cues = _OTHER_TOPIC_CUES.get(field_key, ())
+    current_hits = sum(1 for c in current_cues if c in q)
+    for other_key, cues in _OTHER_TOPIC_CUES.items():
+        if other_key == field_key:
+            continue
+        other_hits = sum(1 for c in cues if c in q)
+        if other_hits >= 2 and other_hits > current_hits:
+            return False
+    return True
+
+
+def _topic_focus_for_prompt(open_gaps: list[str]) -> str:
+    lines = [_TOPIC_FOCUS[k] for k in open_gaps if k in _TOPIC_FOCUS]
+    return "\n".join(lines) if lines else "(none)"
 
 
 def _draft_for_field(spec: ArchitectureSpec, field_key: str) -> str:
@@ -375,8 +575,26 @@ def _build_spec_update_user_payload(
 def _build_question_user_payload(
     spec: ArchitectureSpec,
     target_field: str,
+    settings: Settings | None = None,
+    messages: list[ChatMessage] | None = None,
 ) -> str:
     """Payload for question generation — catalog is internal notes only."""
+    chip_block = ""
+    if settings:
+        hint_ids = [h.agent_id for h in (spec.catalog_hints or []) if h.agent_id]
+        chip_query = _chip_query_context(spec, messages or [], target_field=target_field)
+        catalog_chips = suggest_chips_for_field(
+            target_field,
+            chip_query,
+            settings,
+            preferred_agent_ids=hint_ids,
+            spec=spec,
+            messages=messages or [],
+        )
+        chip_block = (
+            f"\nSUGGESTED CHIPS FROM SPEC.JSON (use these; closest first):\n"
+            f"{json.dumps(catalog_chips, indent=2)}\n"
+        )
     return (
         f"TARGET FIELD (mandatory): {target_field}\n"
         f"WHAT TO ASK ABOUT (plain label): {spec.fields[target_field].label}\n\n"
@@ -388,6 +606,7 @@ def _build_question_user_payload(
         f"{json.dumps(spec.compact_known_json(), indent=2)}\n\n"
         f"INTERNAL NOTES (for chip ideas only — never quote in the question):\n"
         f"{_format_catalog_hints(spec.catalog_hints) or '(none)'}"
+        f"{chip_block}"
     )
 
 
@@ -404,31 +623,110 @@ def _user_interview_answer_count(messages: list[ChatMessage]) -> int:
     )
 
 
-def _build_dynamic_question_payload(
+def _build_catalog_pattern_prompt(
     spec: ArchitectureSpec,
     messages: list[ChatMessage],
+    settings: Settings,
 ) -> str:
-    """Payload for LLM-driven next question / early completion."""
-    pending = spec.pending_user_interview_keys()
-    covered = {
-        key
-        for key in USER_INTERVIEW_FIELD_KEYS
-        if key in _user_answered_fields(messages) or spec.fields[key].is_known
-    }
-    still_open = [k for k in USER_INTERVIEW_FIELD_KEYS if k not in covered]
-    return (
-        f"PROBLEM STATEMENT:\n{spec.problem_statement}\n\n"
-        f"TRANSCRIPT SUMMARY:\n{spec.transcript_summary or '(none)'}\n\n"
-        f"USER_ANSWER_COUNT (interview Q&A after problem): "
-        f"{_user_interview_answer_count(messages)}\n\n"
-        f"RECENT MESSAGES:\n{_format_transcript(messages, RECENT_MESSAGE_LIMIT)}\n\n"
-        f"TOPICS ALREADY COVERED:\n"
-        f"{json.dumps({k: spec.fields[k].value for k in covered if spec.fields.get(k)}, indent=2)}\n\n"
-        f"TOPICS STILL OPEN:\n{', '.join(still_open) or '(none — consider ready=true)'}\n\n"
-        f"PENDING USER FIELDS (spec): {', '.join(pending) or 'none'}\n\n"
-        f"INTERNAL NOTES (chips only):\n"
-        f"{_format_catalog_hints(spec.catalog_hints) or '(none)'}"
+    """Filled catalog_pattern_interview.txt for one LLM turn."""
+    still_open = _open_interview_gaps(spec, messages)
+    covered = [k for k in USER_INTERVIEW_FIELD_KEYS if k not in still_open]
+    transcript_parts: list[str] = []
+    if spec.transcript_summary:
+        transcript_parts.append(spec.transcript_summary)
+    recent = _format_transcript(messages, RECENT_MESSAGE_LIMIT)
+    if recent != "(no messages yet)":
+        transcript_parts.append(recent)
+    transcript = "\n\n".join(transcript_parts) if transcript_parts else "(none)"
+
+    hint_ids = [h.agent_id for h in (spec.catalog_hints or []) if h.agent_id]
+    draft_flow: list[str] | None = None
+    flow_notes = spec.fields.get("architectural_flow")
+    if flow_notes and flow_notes.notes and "Catalog draft flow:" in flow_notes.notes:
+        part = flow_notes.notes.split("Catalog draft flow:", 1)[-1].strip()
+        draft_flow = [s.strip() for s in part.split("→") if s.strip()]
+
+    all_chips = suggest_all_field_chips(
+        spec.problem_statement,
+        settings,
+        preferred_agent_ids=hint_ids,
+        draft_flow=draft_flow,
+        spec=spec,
+        messages=messages,
+        only_fields=still_open,
     )
+    chips_for_open = all_chips
+    suggested_chips_text = json.dumps(chips_for_open, indent=2)
+
+    latest_message = "(none)"
+    for msg in reversed(messages):
+        if msg.role == "user" and msg.content.strip():
+            latest_message = msg.content.strip()
+            break
+
+    return (
+        load_prompt("catalog_pattern_interview.txt")
+        .replace("{problem_statement}", spec.problem_statement)
+        .replace("{history}", transcript)
+        .replace("{message}", latest_message)
+        .replace(
+            "{topics_covered}",
+            json.dumps(
+                {
+                    k: spec.fields[k].value
+                    for k in covered
+                    if spec.fields.get(k) and spec.fields[k].value
+                },
+                indent=2,
+            ),
+        )
+        .replace("{open_gaps}", ", ".join(still_open) or "(none)")
+        .replace("{topic_focus}", _topic_focus_for_prompt(still_open))
+        .replace("{suggested_chips}", suggested_chips_text)
+        .replace(
+            "{preferred_first_topic}",
+            (
+                recommend_first_interview_field(spec, settings, still_open)
+                if _user_interview_answer_count(messages) == 0 and still_open
+                else "(not first turn)"
+            ),
+        )
+    )
+
+
+def _chip_query_context(
+    spec: ArchitectureSpec,
+    messages: list[ChatMessage],
+    target_field: str | None,
+) -> str:
+    return build_chip_query_context(spec, messages, target_field)
+
+
+def _apply_pattern_internal_notes(spec: ArchitectureSpec, parsed: dict) -> None:
+    """Log reuse/draft_flow from catalog-pattern JSON; seed flow notes when pending."""
+    internal = parsed.get("internal")
+    if not isinstance(internal, dict):
+        return
+    logger.info(
+        "Catalog pattern: project=%s agents=%d draft_steps=%d",
+        internal.get("reference_project", ""),
+        len(internal.get("candidate_agents") or []),
+        len(internal.get("draft_flow") or []),
+    )
+    draft = internal.get("draft_flow")
+    flow_field = spec.fields.get("architectural_flow")
+    if (
+        flow_field
+        and not flow_field.is_known
+        and isinstance(draft, list)
+        and draft
+    ):
+        steps = " → ".join(str(s).strip() for s in draft[:7] if str(s).strip())
+        if steps:
+            note = f"Catalog draft flow: {steps}"
+            flow_field.notes = (
+                f"{flow_field.notes} | {note}" if flow_field.notes else note
+            )
 
 
 def _infer_interview_fields_on_complete(
@@ -510,8 +808,10 @@ def _question_from_parsed(
     spec: ArchitectureSpec,
     field_key: str,
     parsed: dict,
+    settings: Settings | None = None,
+    messages: list[ChatMessage] | None = None,
 ) -> InterviewQuestion:
-    """Build InterviewQuestion from LLM JSON with sanitization and chip defaults."""
+    """Build InterviewQuestion from LLM JSON with catalog chip merge."""
     fallback_q, fallback_chips = _fallback_question_for_field(spec, field_key)
     question = _sanitize_user_facing_text(
         (parsed.get("question") or "").strip(),
@@ -528,8 +828,37 @@ def _question_from_parsed(
         chips = fallback_chips
     elif _FORBIDDEN_QUESTION_PHRASES.search(question):
         question = fallback_q
+    question = _make_question_plain(question)
+    if _should_use_user_only_question(question) or not _question_scope_ok(
+        question, field_key
+    ):
+        question = _user_only_question_for_field(spec, field_key)
 
     other_chip = "Other / describe in chat"
+    catalog_ref = ""
+    draft_flow: list[str] | None = None
+    internal = parsed.get("internal")
+    if isinstance(internal, dict) and isinstance(internal.get("draft_flow"), list):
+        draft_flow = [str(s).strip() for s in internal["draft_flow"] if str(s).strip()]
+
+    chip_query = ""
+    hint_ids: list[str] = []
+    if settings:
+        hint_ids = [h.agent_id for h in (spec.catalog_hints or []) if h.agent_id]
+        chip_query = _chip_query_context(spec, messages or [], target_field=field_key)
+        catalog_ref, _catalog_why = catalog_suggestion_context(
+            chip_query,
+            settings,
+            preferred_agent_ids=hint_ids,
+        )
+        suggestion_reason = suggestion_reason_for_field(
+            field_key,
+            chip_query,
+            settings,
+            preferred_agent_ids=hint_ids,
+        )
+    else:
+        suggestion_reason = ""
 
     def _clean_chip(label: str) -> str:
         s = label.strip()
@@ -537,16 +866,162 @@ def _question_from_parsed(
             return other_chip
         return _sanitize_user_facing_text(s, spec) or s
 
-    chips = [_clean_chip(c) for c in chips if str(c).strip()]
-    chips = _ensure_chips(field_key, chips)
+    llm_chip_list = [_clean_chip(c) for c in chips if str(c).strip()]
+    if settings:
+        chips = suggest_chips_for_field(
+            field_key,
+            chip_query,
+            settings,
+            preferred_agent_ids=hint_ids,
+            draft_flow=draft_flow,
+            spec=spec,
+            messages=messages or [],
+            llm_chips=llm_chip_list,
+        )
+    elif llm_chip_list:
+        chips = _ensure_chips(field_key, llm_chip_list)
+    else:
+        chips = _ensure_chips(field_key, [])
     chips = [_clean_chip(c) for c in chips]
+
+    suggested = pick_suggested_chip(chips, messages or []) if chips else None
+    if suggested and suggested.lower() == other_chip.lower():
+        suggested = None
 
     return InterviewQuestion(
         field_key=field_key,
+        topic_label=_topic_label(field_key),
         question=question,
         chips=chips,
-        why_it_matters=(parsed.get("why_it_matters") or None),
+        why_it_matters=None,
+        suggested_chip=suggested,
+        catalog_reference=catalog_ref or None,
+        suggestion_reason=suggestion_reason or None,
     )
+
+
+def _make_question_plain(question: str) -> str:
+    """
+    Force simple, business-friendly wording for non-technical users.
+    """
+    q = re.sub(r"\s+", " ", question.strip())
+    replacements = {
+        "architectural flow": "step order",
+        "core components": "main parts",
+        "integrations": "systems",
+        "orchestration": "how steps run",
+    }
+    for old, new in replacements.items():
+        q = re.sub(old, new, q, flags=re.I)
+    # Strip catalog/project-style references from question text.
+    q = re.sub(r"\b(closest match|top match|from our catalog|spec\.json)\b", "", q, flags=re.I)
+    q = re.sub(r"\s{2,}", " ", q).strip(" ,.;:-")
+    # Keep option choices out of question text; chips should carry options.
+    q = re.sub(r"[\u2014:\-]\s*[^?]*\b(?:or|and/or)\b[^?]*\??$", "", q, flags=re.I).strip(
+        " ,.;:-"
+    )
+    # Keep questions short and direct.
+    words = q.split()
+    if len(words) > 24:
+        q = " ".join(words[:24]).rstrip(",.;:")
+    if not q.endswith("?"):
+        q = q.rstrip(".") + "?"
+    return q
+
+
+def _build_catalog_backed_question(
+    spec: ArchitectureSpec,
+    field_key: str,
+    settings: Settings,
+    messages: list[ChatMessage],
+) -> InterviewQuestion:
+    """
+    Deterministic question + dynamic catalog suggestions.
+
+    This avoids hard-to-understand LLM wording while keeping chips dynamic from spec.json.
+    """
+    if _user_interview_answer_count(messages) == 0:
+        question = _make_question_plain(
+            easy_question_for_project(spec, field_key, settings)
+        )
+    else:
+        question = _user_only_question_for_field(spec, field_key)
+    hint_ids = [h.agent_id for h in (spec.catalog_hints or []) if h.agent_id]
+    chip_query = _chip_query_context(spec, messages, target_field=field_key)
+    chips = suggest_chips_for_field(
+        field_key,
+        chip_query,
+        settings,
+        preferred_agent_ids=hint_ids,
+        spec=spec,
+        messages=messages,
+    )
+    catalog_ref, _catalog_why = catalog_suggestion_context(
+        chip_query,
+        settings,
+        preferred_agent_ids=hint_ids,
+    )
+    suggestion_reason = suggestion_reason_for_field(
+        field_key,
+        chip_query,
+        settings,
+        preferred_agent_ids=hint_ids,
+    )
+    other = "Other / describe in chat"
+    suggested = pick_suggested_chip(chips, messages)
+    if suggested and suggested.lower() == other.lower():
+        suggested = None
+    return InterviewQuestion(
+        field_key=field_key,
+        topic_label=_topic_label(field_key),
+        question=question,
+        chips=chips,
+        why_it_matters=None,
+        suggested_chip=suggested,
+        catalog_reference=catalog_ref or None,
+        suggestion_reason=suggestion_reason or None,
+    )
+
+
+def _user_only_question_for_field(spec: ArchitectureSpec, field_key: str) -> str:
+    """Deterministic non-catalog question text for clarity."""
+    hook = spec.problem_statement.strip()
+    if len(hook) > 70:
+        hook = hook[:70].rsplit(" ", 1)[0] + "…"
+    prompts = {
+        "hitl_behavior": (
+            f"For this work ({hook}), who should review results: every case or only exceptions?"
+        ),
+        "integrations": (
+            f"For this work ({hook}), where does data come from and where should results go?"
+        ),
+        "architectural_flow": (
+            f"For this work ({hook}), what step order should happen from start to finish?"
+        ),
+        "core_components": (
+            f"For this work ({hook}), what main parts do you need (intake, checks, review, output)?"
+        ),
+        "data_flow": (
+            f"For this work ({hook}), should each step pass work to the next or use one shared record?"
+        ),
+        "orchestration_model": (
+            f"For this work ({hook}), should the next step start automatically or wait for a person?"
+        ),
+    }
+    return _make_question_plain(prompts.get(field_key, f"What should happen for {field_key}?"))
+
+
+def _should_use_user_only_question(question: str) -> bool:
+    text = (question or "").strip()
+    if not text:
+        return True
+    if len(text.split()) > 22:
+        return True
+    if _FORBIDDEN_QUESTION_PHRASES.search(text):
+        return True
+    if re.search(r"\b(match|catalog|agent|spec\.json)\b", text, flags=re.I):
+        return True
+    return False
 
 
 def next_question(
@@ -556,7 +1031,7 @@ def next_question(
     client: AzureOpenAI | None = None,
     messages: list[ChatMessage] | None = None,
 ) -> Optional[InterviewQuestion]:
-    """Ask the next question when needed, or end when the model has enough context."""
+    """Hybrid mode: prompt-driven question first, deterministic fallback."""
     msgs = messages or []
     if msgs:
         _confirm_user_answered_fields(spec, msgs)
@@ -564,59 +1039,94 @@ def next_question(
     if spec.status == "ready":
         return None
 
-    # Fast mode: avoid per-turn LLM routing; ask deterministic field questions.
-    if FAST_INTERVIEW_MODE:
-        field_key = _pick_next_field_key(spec, msgs, last_answered_field)
-        if not field_key:
-            return None
-        return _question_from_parsed(spec, field_key, {"question": "", "chips": []})
-
     if client is None:
         client = make_client(settings)
 
-    system = load_prompt("dynamic_next_question.txt")
-    user = _build_dynamic_question_payload(spec, msgs)
-    raw = call_llm(client, settings, system, user, json_mode=True, temperature=0.25)
-    parsed = json.loads(strip_json_fences(raw))
-
-    if parsed.get("ready") is True:
-        if _user_interview_answer_count(msgs) >= 1:
-            spec = _infer_interview_fields_on_complete(spec, msgs, settings, client)
-            if spec.status == "ready":
-                return None
-        else:
-            logger.info("Model requested ready before any Q&A — asking first question")
-
-    field_key = str(parsed.get("field_key") or "").strip()
-    if field_key not in USER_INTERVIEW_FIELD_KEYS:
-        field_key = _pick_next_field_key(spec, msgs, last_answered_field)
-    if not field_key:
+    open_gaps = _open_interview_gaps(spec, msgs)
+    if not open_gaps:
         spec = _infer_interview_fields_on_complete(spec, msgs, settings, client)
         if spec.status == "ready":
             return None
-        field_key = _pick_next_field_key(spec, msgs, last_answered_field)
-        if not field_key:
+        open_gaps = _open_interview_gaps(spec, msgs)
+        if not open_gaps:
             return None
 
-    # If dynamic JSON lacked a usable question, fall back to per-field prompts.
-    question_text = (parsed.get("question") or "").strip()
-    if not question_text or len(question_text) < 12:
-        is_architecture = field_key in FIELD_GROUPS["architecture"]
-        field_prompt = (
-            "architecture_feedback_question.txt"
-            if is_architecture
-            else "requirements_question.txt"
-        )
-        field_raw = call_llm(
+    fallback_key = _pick_next_field_key(spec, msgs, last_answered_field, settings)
+    field_key = fallback_key
+    is_first_turn = _user_interview_answer_count(msgs) == 0
+
+    if is_first_turn and field_key:
+        return _build_catalog_backed_question(spec, field_key, settings, msgs)
+
+    # 1) Prompt-driven question generation (easy wording + dynamic chips guidance).
+    try:
+        system = _build_catalog_pattern_prompt(spec, msgs, settings)
+        raw = call_llm(
             client,
             settings,
-            load_prompt(field_prompt),
-            _build_question_user_payload(spec, field_key),
+            system,
+            "Respond with the JSON object for this interview turn only.",
             json_mode=True,
+            temperature=0.2,
         )
-        parsed = json.loads(strip_json_fences(field_raw))
+        if "READY_TO_GENERATE" in raw.upper():
+            if _user_interview_answer_count(msgs) >= 1:
+                spec = _infer_interview_fields_on_complete(spec, msgs, settings, client)
+                if spec.status == "ready":
+                    return None
 
-    return _question_from_parsed(spec, field_key, parsed)
+        parsed = json.loads(strip_json_fences(raw))
+
+        # Allow prompt to indicate completion only when no open gaps remain.
+        if parsed.get("ready") is True and not open_gaps:
+            if _user_interview_answer_count(msgs) >= 1:
+                spec = _infer_interview_fields_on_complete(spec, msgs, settings, client)
+                if spec.status == "ready":
+                    return None
+        elif parsed.get("ready") is True and open_gaps:
+            logger.info(
+                "Ignoring premature ready=true while gaps remain: %s",
+                open_gaps,
+            )
+
+        parsed_field = str(parsed.get("field_key") or "").strip()
+        resolved = _resolve_field_key_for_turn(
+            parsed_field,
+            open_gaps,
+            spec,
+            msgs,
+            fallback_key,
+        )
+        if not resolved:
+            return _build_catalog_backed_question(
+                spec,
+                fallback_key or open_gaps[0],
+                settings,
+                msgs,
+            )
+        field_key = resolved
+        if parsed_field and parsed_field != field_key:
+            logger.info(
+                "Rejected field_key %r (open gaps: %s) — using %r",
+                parsed_field,
+                open_gaps,
+                field_key,
+            )
+
+        prompt_question = _question_from_parsed(
+            spec,
+            field_key,
+            parsed,
+            settings,
+            msgs,
+        )
+        if prompt_question.question and len(prompt_question.chips) >= 2:
+            return prompt_question
+    except Exception as exc:
+        logger.warning("Hybrid prompt mode fallback triggered: %s", exc)
+
+    # 2) Deterministic fallback if prompt output is invalid, hard to parse, or failed.
+    return _build_catalog_backed_question(spec, field_key, settings, msgs)
 
 
 def synthesize_architecture_blueprint(
@@ -675,20 +1185,17 @@ def _finalize_session(
 ) -> InterviewSession:
     session.spec.status = "ready"
     session.pending_question = None
-    # Fast mode: avoid expensive blueprint synthesis on interview turn completion.
-    # Architecture generation remains available in Phase 3 endpoints.
-    if not FAST_INTERVIEW_MODE:
-        markdown, graph = synthesize_architecture_blueprint(
-            session.spec, session.messages, settings, client=client
-        )
-        session.spec.architecture_blueprint = markdown
-        session.spec.graph_draft = graph
+    markdown, graph = synthesize_architecture_blueprint(
+        session.spec, session.messages, settings, client=client
+    )
+    session.spec.architecture_blueprint = markdown
+    session.spec.graph_draft = graph
     session.messages.append(
         ChatMessage(
             role="assistant",
             content=(
                 "Requirements and architectural flow are confirmed. "
-                "Ready for Phase 3 architecture generation."
+                "See the Architecture blueprint and graph draft in the panel — ready for Phase 3."
             ),
         )
     )
@@ -704,12 +1211,49 @@ def _assistant_message_for_question(question: InterviewQuestion) -> str:
 
 def _clarifying_to_interview_question(
     item: ClarifyingQuestionItem,
+    spec: ArchitectureSpec,
+    settings: Settings,
+    messages: list[ChatMessage] | None = None,
 ) -> InterviewQuestion:
+    hint_ids = [h.agent_id for h in (spec.catalog_hints or []) if h.agent_id]
+    clarifying_query = _chip_query_context(
+        spec,
+        messages or [],
+        target_field="core_components",
+    )
+    scope_chips = suggest_clarifying_chips(
+        clarifying_query,
+        settings,
+        preferred_agent_ids=hint_ids,
+    )
+    inline_chips = _extract_question_options(item.question)
+    if len(inline_chips) >= 3:
+        # For clarifying questions, clickable options should mirror question options first.
+        scope_chips = _ensure_chips("core_components", inline_chips)
+    elif inline_chips:
+        # If we only extracted 1-2 options, blend with catalog-backed choices.
+        scope_chips = merge_catalog_chips("core_components", inline_chips, scope_chips)
+    catalog_ref, catalog_why = catalog_suggestion_context(
+        clarifying_query,
+        settings,
+        preferred_agent_ids=hint_ids,
+    )
+    from services.chip_quality import pick_suggested_chip
+
+    suggested = pick_suggested_chip(scope_chips, query=clarifying_query)
     return InterviewQuestion(
         field_key=clarifying_field_key(item.id),
-        question=item.question,
-        chips=[],
-        why_it_matters=item.why_it_matters or None,
+        topic_label="Scope",
+        question=_make_question_plain(item.question),
+        chips=scope_chips,
+        why_it_matters=item.why_it_matters or "Helps match the right catalog delivery pattern.",
+        suggested_chip=suggested,
+        catalog_reference=catalog_ref or None,
+        suggestion_reason=(
+            f"Suggested from {catalog_ref}: closest scope match in spec.json."
+            if catalog_ref
+            else None
+        ),
     )
 
 
@@ -718,7 +1262,7 @@ def _begin_main_interview(
     settings: Settings,
     client: AzureOpenAI,
 ) -> InterviewSession:
-    """Load catalog hints and start the choice-based interview."""
+    """Start spec.json agent workflow interview (match agents → input questions)."""
     if session.clarifying_answers:
         session.spec.transcript_summary = format_clarifying_summary(
             session.clarifying_questions,
@@ -726,61 +1270,9 @@ def _begin_main_interview(
         )
     else:
         session.spec.transcript_summary = session.spec.problem_statement[:800]
-    enriched_query = (
-        f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
-    )
-    session.spec.catalog_hints = build_catalog_hints_for_interview(
-        enriched_query, settings, top_k=8
-    )
-    # Fast mode skips expensive spec-update LLM pass at start.
-    if FAST_INTERVIEW_MODE:
-        _confirm_user_answered_fields(session.spec, session.messages)
-        apply_validators(session.spec)
-        session.spec.recompute_status()
-    else:
-        session.spec = update_spec(session.spec, session.messages, settings, client=client)
 
-    if session.spec.status == "ready":
-        return _finalize_session(session, settings, client)
-
-    question = next_question(
-        session.spec,
-        settings,
-        last_answered_field=None,
-        client=client,
-        messages=session.messages,
-    )
-    if question is None:
-        if session.spec.status == "ready":
-            return _finalize_session(session, settings, client)
-        logger.warning(
-            "No first question for session %s after start — using fallback field",
-            session.id,
-        )
-        field_key = _pick_next_field_key(session.spec, session.messages, None)
-        if not field_key:
-            return session
-        question = _question_from_parsed(
-            session.spec,
-            field_key,
-            {"question": "", "chips": []},
-        )
-
-    session.pending_question = question
-    intro = (
-        "Thanks — I'll ask a few focused questions about how you want this to work. "
-        "Pick the closest option or describe in your own words. "
-        "We can stop once I have enough detail.\n\n"
-    )
-
-    session.messages.append(
-        ChatMessage(
-            role="assistant",
-            content=f"{intro}{_assistant_message_for_question(question)}",
-            field_key=question.field_key,
-        )
-    )
-    return session
+    # Agent-workflow interviews use catalog-backed questions; skip a full spec LLM pass here.
+    return begin_agent_workflow_interview(session, settings, client)
 
 
 def run_interview_turn(
@@ -807,8 +1299,20 @@ def run_interview_turn(
             session.pending_question.field_key if session.pending_question else None
         )
         session.messages.append(
-            ChatMessage(role="user", content=answer, field_key=field_key)
+            ChatMessage(role="user", content=answer, field_key=field_key
         )
+        )
+
+        if session.agent_workflow is not None:
+            session.pending_question = None
+            return advance_agent_workflow_turn(
+                session,
+                settings,
+                answer,
+                client,
+                answered_field_key=field_key,
+            )
+
         session.pending_question = None
 
         if field_key and is_clarifying_field_key(field_key):
@@ -819,7 +1323,9 @@ def run_interview_turn(
                 session.clarifying_answers,
             )
             if next_cq:
-                q = _clarifying_to_interview_question(next_cq)
+                q = _clarifying_to_interview_question(
+                    next_cq, session.spec, settings, session.messages
+                )
                 session.pending_question = q
                 session.messages.append(
                     ChatMessage(
@@ -833,35 +1339,24 @@ def run_interview_turn(
 
         if field_key:
             session.last_answered_field = field_key
-            _apply_direct_answer(session.spec, field_key, answer)
-            fields_just_set.add(field_key)
+            if not is_agent_input_field_key(field_key):
+                _apply_direct_answer(session.spec, field_key, answer)
+                fields_just_set.add(field_key)
 
-    if FAST_INTERVIEW_MODE:
-        # Keep this path snappy: trust direct field write, re-validate locally.
-        _confirm_user_answered_fields(session.spec, session.messages)
-        _maybe_auto_fill_flow_feedback(session.spec)
-        _enforce_architecture_confirmation_gate(
-            session.spec,
-            session.messages,
-            fields_just_set=fields_just_set,
-        )
-        apply_validators(session.spec)
-        session.spec.recompute_status()
-    else:
-        session.spec = update_spec(
-            session.spec,
-            session.messages,
-            settings,
-            client=client,
-            fields_just_set=fields_just_set,
-        )
+    session.spec = update_spec(
+        session.spec,
+        session.messages,
+        settings,
+        client=client,
+        fields_just_set=fields_just_set,
+    )
 
-        refresh_query = (
-            f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
-        )
-        session.spec.catalog_hints = build_catalog_hints_for_interview(
-            refresh_query, settings, top_k=8
-        )
+    refresh_query = (
+        f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
+    )
+    session.spec.catalog_hints = build_catalog_hints_for_interview(
+        refresh_query, settings, top_k=8
+    )
 
     if session.spec.status == "ready":
         return _finalize_session(session, settings, client)
@@ -901,6 +1396,60 @@ def run_interview_turn(
     return session
 
 
+def _start_clarifying_phase(
+    session: InterviewSession,
+    settings: Settings,
+    client: AzureOpenAI,
+) -> InterviewSession:
+    """Load spec.json hints and ask catalog-grounded clarifying questions first."""
+    statement = session.spec.problem_statement
+    session.spec.catalog_hints = build_catalog_hints_for_interview(
+        statement, settings, top_k=8
+    )
+    catalog_block = format_catalog_brief_for_interview(
+        statement,
+        settings,
+        preferred_agent_ids=[h.agent_id for h in session.spec.catalog_hints or []],
+    )
+
+    try:
+        session.clarifying_questions = generate_clarifying_questions(
+            statement,
+            settings,
+            client=client,
+            catalog_context=catalog_block,
+        )
+    except Exception as exc:
+        logger.warning("Clarifying questions skipped: %s", exc)
+        session.clarifying_questions = []
+
+    session.clarifying_answers = {}
+    next_cq = pending_clarifying_question(
+        session.clarifying_questions,
+        session.clarifying_answers,
+    )
+    if not next_cq:
+        return _begin_main_interview(session, settings, client)
+
+    question = _clarifying_to_interview_question(
+        next_cq, session.spec, settings, session.messages
+    )
+    session.pending_question = question
+    intro = (
+        "I'll start with a few short questions so we can match your needs to "
+        "the right capabilities in our agent catalog. Pick the closest option "
+        "or describe your own answer. "
+    )
+    session.messages.append(
+        ChatMessage(
+            role="assistant",
+            content=f"{intro}{_assistant_message_for_question(question)}",
+            field_key=question.field_key,
+        )
+    )
+    return session
+
+
 def start_session(problem_statement: str, settings: Settings) -> InterviewSession:
     statement = problem_statement.strip()
     if not statement:
@@ -915,7 +1464,4 @@ def start_session(problem_statement: str, settings: Settings) -> InterviewSessio
     )
 
     client = make_client(settings)
-    session.clarifying_questions = []
-    session.clarifying_answers = {}
-
     return _begin_main_interview(session, settings, client)
