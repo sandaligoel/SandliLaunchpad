@@ -146,7 +146,10 @@ def submit_turn(session_id: str, body: TurnRequest) -> SessionResponse:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Interview turn failed: {exc}") from exc
 
-    session_store.save(session)
+    # Fast response path: keep turn-to-turn updates in memory, persist fully
+    # only when interview reaches sufficient/ready milestones.
+    is_milestone = session.spec.status == "ready"
+    session_store.save(session, lightweight=not is_milestone)
     return SessionResponse(session=session)
 
 

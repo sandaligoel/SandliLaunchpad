@@ -86,3 +86,11 @@ app.mount(
     StaticFiles(directory=str(STATIC_DIR), html=True),
     name="launchpad-ui",
 )
+
+ARCHITECTURE_STATIC = STATIC_DIR / "architecture"
+if ARCHITECTURE_STATIC.is_dir():
+    app.mount(
+        "/static/architecture",
+        StaticFiles(directory=str(ARCHITECTURE_STATIC), html=True),
+        name="architecture-flow",
+    )

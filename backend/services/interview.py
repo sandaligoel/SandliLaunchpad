@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from typing import Optional
@@ -45,6 +46,12 @@ logger = logging.getLogger(__name__)
 
 RECENT_MESSAGE_LIMIT = 6
 DETAILED_FLOW_MIN_CHARS = 80
+FAST_INTERVIEW_MODE = os.getenv("INTERVIEW_FAST_MODE", "1").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 # Plain-language chip fallbacks when the model returns few options.
 _DEFAULT_CHIPS: dict[str, list[str]] = {
@@ -557,6 +564,13 @@ def next_question(
     if spec.status == "ready":
         return None
 
+    # Fast mode: avoid per-turn LLM routing; ask deterministic field questions.
+    if FAST_INTERVIEW_MODE:
+        field_key = _pick_next_field_key(spec, msgs, last_answered_field)
+        if not field_key:
+            return None
+        return _question_from_parsed(spec, field_key, {"question": "", "chips": []})
+
     if client is None:
         client = make_client(settings)
 
@@ -661,17 +675,20 @@ def _finalize_session(
 ) -> InterviewSession:
     session.spec.status = "ready"
     session.pending_question = None
-    markdown, graph = synthesize_architecture_blueprint(
-        session.spec, session.messages, settings, client=client
-    )
-    session.spec.architecture_blueprint = markdown
-    session.spec.graph_draft = graph
+    # Fast mode: avoid expensive blueprint synthesis on interview turn completion.
+    # Architecture generation remains available in Phase 3 endpoints.
+    if not FAST_INTERVIEW_MODE:
+        markdown, graph = synthesize_architecture_blueprint(
+            session.spec, session.messages, settings, client=client
+        )
+        session.spec.architecture_blueprint = markdown
+        session.spec.graph_draft = graph
     session.messages.append(
         ChatMessage(
             role="assistant",
             content=(
                 "Requirements and architectural flow are confirmed. "
-                "See the Architecture blueprint and graph draft in the panel — ready for Phase 3."
+                "Ready for Phase 3 architecture generation."
             ),
         )
     )
@@ -715,7 +732,13 @@ def _begin_main_interview(
     session.spec.catalog_hints = build_catalog_hints_for_interview(
         enriched_query, settings, top_k=8
     )
-    session.spec = update_spec(session.spec, session.messages, settings, client=client)
+    # Fast mode skips expensive spec-update LLM pass at start.
+    if FAST_INTERVIEW_MODE:
+        _confirm_user_answered_fields(session.spec, session.messages)
+        apply_validators(session.spec)
+        session.spec.recompute_status()
+    else:
+        session.spec = update_spec(session.spec, session.messages, settings, client=client)
 
     if session.spec.status == "ready":
         return _finalize_session(session, settings, client)
@@ -813,20 +836,32 @@ def run_interview_turn(
             _apply_direct_answer(session.spec, field_key, answer)
             fields_just_set.add(field_key)
 
-    session.spec = update_spec(
-        session.spec,
-        session.messages,
-        settings,
-        client=client,
-        fields_just_set=fields_just_set,
-    )
+    if FAST_INTERVIEW_MODE:
+        # Keep this path snappy: trust direct field write, re-validate locally.
+        _confirm_user_answered_fields(session.spec, session.messages)
+        _maybe_auto_fill_flow_feedback(session.spec)
+        _enforce_architecture_confirmation_gate(
+            session.spec,
+            session.messages,
+            fields_just_set=fields_just_set,
+        )
+        apply_validators(session.spec)
+        session.spec.recompute_status()
+    else:
+        session.spec = update_spec(
+            session.spec,
+            session.messages,
+            settings,
+            client=client,
+            fields_just_set=fields_just_set,
+        )
 
-    refresh_query = (
-        f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
-    )
-    session.spec.catalog_hints = build_catalog_hints_for_interview(
-        refresh_query, settings, top_k=8
-    )
+        refresh_query = (
+            f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
+        )
+        session.spec.catalog_hints = build_catalog_hints_for_interview(
+            refresh_query, settings, top_k=8
+        )
 
     if session.spec.status == "ready":
         return _finalize_session(session, settings, client)

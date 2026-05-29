@@ -72,9 +72,11 @@ def _load_from_storage(session_id: str) -> Optional[InterviewSession]:
     return None
 
 
-def save(session: InterviewSession) -> None:
+def save(session: InterviewSession, *, lightweight: bool = False) -> None:
     with _lock:
         _sessions[session.id] = session
+    if lightweight:
+        return
     _persist(session)
     try:
         from services.builder_sync import sync_workflow_from_session
