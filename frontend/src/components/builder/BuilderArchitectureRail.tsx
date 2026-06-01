@@ -11,9 +11,22 @@ import {
 interface Props {
   plan: ArchitecturePlan;
   catalogAgents: AgentDef[];
+  disabled?: boolean;
+  onIoJsonChange?: (
+    nodeId: string,
+    patch: {
+      input_json?: Record<string, unknown>;
+      output_json?: Record<string, unknown>;
+    },
+  ) => void;
 }
 
-export function BuilderArchitectureRail({ plan, catalogAgents }: Props) {
+export function BuilderArchitectureRail({
+  plan,
+  catalogAgents,
+  disabled,
+  onIoJsonChange,
+}: Props) {
   const [detail, setDetail] = useState<StepDetailPayload | null>(null);
   const [simStep, setSimStep] = useState({ index: 0, total: 0, label: "" });
 
@@ -103,7 +116,30 @@ export function BuilderArchitectureRail({ plan, catalogAgents }: Props) {
           </div>
         </section>
       </div>
-      <StepDetailInspector detail={detail} />
+      <StepDetailInspector
+        detail={detail}
+        disabled={disabled}
+        onIoJsonChange={(nodeId, patch) => {
+          onIoJsonChange?.(nodeId, patch);
+          setDetail((prev) => {
+            if (!prev || prev.id !== nodeId) return prev;
+            return {
+              ...prev,
+              ...(patch.input_json !== undefined
+                ? { inputJson: patch.input_json }
+                : {}),
+              ...(patch.output_json !== undefined
+                ? { outputJson: patch.output_json }
+                : {}),
+            };
+          });
+          window.dispatchEvent(
+            new CustomEvent("launchpad:select-node", {
+              detail: { nodeId },
+            }),
+          );
+        }}
+      />
     </div>
   );
 }

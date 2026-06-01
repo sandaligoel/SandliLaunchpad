@@ -105,6 +105,12 @@ export function adaptGuruPlanToFlowPlan(
         pipeline_order: String((orderRank.get(node.id) ?? idx) + 1),
         catalog_inputs: JSON.stringify(inputs),
         catalog_outputs: JSON.stringify(outputs),
+        ...(node.input_json != null
+          ? { input_json: JSON.stringify(node.input_json) }
+          : {}),
+        ...(node.output_json != null
+          ? { output_json: JSON.stringify(node.output_json) }
+          : {}),
       },
     };
   });

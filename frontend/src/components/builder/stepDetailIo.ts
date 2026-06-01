@@ -1,9 +1,32 @@
 export function prettyJson(obj: unknown): string {
-  if (obj == null) return "—";
+  if (obj == null) return "{}";
   try {
     return JSON.stringify(obj, null, 2);
   } catch {
     return String(obj);
+  }
+}
+
+export function parseJsonObject(
+  text: string,
+):
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false; error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { ok: false, error: "JSON cannot be empty" };
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, error: "Must be a JSON object (not an array or primitive)" };
+    }
+    return { ok: true, value: parsed as Record<string, unknown> };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Invalid JSON",
+    };
   }
 }
 

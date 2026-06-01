@@ -31,6 +31,8 @@ export function updatePlanStep(
     inputs?: string[];
     outputs?: string[];
     description?: string;
+    input_json?: Record<string, unknown> | null;
+    output_json?: Record<string, unknown> | null;
   },
 ): ArchitecturePlan {
   const reuse_decisions = plan.reuse_decisions.map((d) =>
@@ -46,6 +48,8 @@ export function updatePlanStep(
       ...(patch.description !== undefined
         ? { description: patch.description }
         : {}),
+      ...(patch.input_json !== undefined ? { input_json: patch.input_json } : {}),
+      ...(patch.output_json !== undefined ? { output_json: patch.output_json } : {}),
     };
   });
   return {

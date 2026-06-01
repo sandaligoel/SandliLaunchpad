@@ -19,6 +19,7 @@ import { useWorkflowPresentation } from "@/context/WorkflowPresentationContext";
 import { Loader2, Pencil } from "lucide-react";
 import { useAgents } from "@/api/hooks";
 import { hydratePlanStepMetadata } from "@/utils/stepIo";
+import { updatePlanStep } from "@/utils/planFlowSync";
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -267,7 +268,18 @@ export function LaunchpadBuilder({ sessionId }: { sessionId: string }) {
         ) : null}
         <ArchitectureCanvas plan={plan} catalogAgents={catalogAgents} />
         {!isPresentation ? (
-          <BuilderArchitectureRail plan={plan} catalogAgents={catalogAgents} />
+          <BuilderArchitectureRail
+            plan={plan}
+            catalogAgents={catalogAgents}
+            onIoJsonChange={(nodeId, patch) => {
+              setPlan((prev) => {
+                if (!prev) return prev;
+                const next = updatePlanStep(prev, nodeId, patch);
+                schedulePersist(next, selectedNodeId);
+                return next;
+              });
+            }}
+          />
         ) : null}
       </div>
     </>

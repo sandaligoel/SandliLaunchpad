@@ -1,6 +1,11 @@
+import { useCallback, useEffect, useState } from "react";
 import { ReuseBadge } from "@/architecture-flow/components/nodes/shared";
 import type { ReuseDecision } from "@/architecture-flow/types/plan";
-import { prettyJson, summarizeJsonEntries } from "@/components/builder/stepDetailIo";
+import {
+  parseJsonObject,
+  prettyJson,
+  summarizeJsonEntries,
+} from "@/components/builder/stepDetailIo";
 
 export type StepDetailPayload = {
   id: string;
@@ -17,21 +22,49 @@ export type StepDetailPayload = {
   tools?: string[];
 };
 
+type IoJsonKind = "input" | "output";
+
 function IoSection({
   kind,
   title,
   json,
+  disabled,
+  onSave,
 }: {
-  kind: "input" | "output";
+  kind: IoJsonKind;
   title: string;
   json: Record<string, unknown> | null | undefined;
+  disabled?: boolean;
+  onSave?: (kind: IoJsonKind, value: Record<string, unknown>) => void;
 }) {
+  const [draft, setDraft] = useState(() => prettyJson(json));
+  const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDraft(prettyJson(json));
+    setError(null);
+    setDirty(false);
+  }, [json, kind]);
+
   const entries = summarizeJsonEntries(
     json ?? undefined,
     kind === "input"
       ? "No input fields for this step."
       : "No output fields for this step.",
   );
+
+  const commit = useCallback(() => {
+    if (disabled || !onSave) return;
+    const result = parseJsonObject(draft);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    setDirty(false);
+    onSave(kind, result.value);
+  }, [disabled, draft, kind, onSave]);
 
   return (
     <div className={`builder-io-section builder-io-section--${kind}`}>
@@ -49,21 +82,73 @@ function IoSection({
           ),
         )}
       </ul>
-      <label className="builder-io-block-label">
+      <label className="builder-io-block-label" htmlFor={`builder-io-${kind}`}>
         Full {kind} JSON
       </label>
-      <pre
-        className="builder-io-pre"
-        role="region"
+      <textarea
+        id={`builder-io-${kind}`}
+        className="builder-io-textarea"
+        rows={10}
+        spellCheck={false}
+        disabled={disabled || !onSave}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setDirty(true);
+          if (error) setError(null);
+        }}
+        onBlur={() => {
+          if (dirty) commit();
+        }}
         aria-label={`Step ${kind} JSON`}
-      >
-        {prettyJson(json)}
-      </pre>
+        aria-invalid={error ? true : undefined}
+      />
+      {error ? <p className="builder-io-error">{error}</p> : null}
+      {onSave && !disabled ? (
+        <div className="builder-io-actions">
+          <button
+            type="button"
+            className="builder-io-apply"
+            onClick={commit}
+            disabled={!dirty}
+          >
+            Apply JSON
+          </button>
+          {dirty ? (
+            <span className="builder-io-hint">Unsaved edits</span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function StepDetailInspector({ detail }: { detail: StepDetailPayload | null }) {
+export function StepDetailInspector({
+  detail,
+  disabled,
+  onIoJsonChange,
+}: {
+  detail: StepDetailPayload | null;
+  disabled?: boolean;
+  onIoJsonChange?: (
+    nodeId: string,
+    patch: {
+      input_json?: Record<string, unknown>;
+      output_json?: Record<string, unknown>;
+    },
+  ) => void;
+}) {
+  const handleSave = useCallback(
+    (kind: IoJsonKind, value: Record<string, unknown>) => {
+      if (!detail?.id || !onIoJsonChange) return;
+      onIoJsonChange(
+        detail.id,
+        kind === "input" ? { input_json: value } : { output_json: value },
+      );
+    },
+    [detail?.id, onIoJsonChange],
+  );
+
   if (!detail) {
     return (
       <div className="builder-step-sidebar">
@@ -140,11 +225,15 @@ export function StepDetailInspector({ detail }: { detail: StepDetailPayload | nu
           kind="input"
           title="Input information"
           json={detail.inputJson ?? null}
+          disabled={disabled}
+          onSave={onIoJsonChange ? handleSave : undefined}
         />
         <IoSection
           kind="output"
           title="Output information"
           json={detail.outputJson ?? null}
+          disabled={disabled}
+          onSave={onIoJsonChange ? handleSave : undefined}
         />
       </div>
     </div>

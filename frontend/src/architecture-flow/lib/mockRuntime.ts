@@ -22,6 +22,33 @@ function upstreamLabels(plan: ArchitecturePlan | undefined, nodeId: string): str
     .filter(Boolean);
 }
 
+function parseMetaJsonObject(
+  raw: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!raw?.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+function applySavedJsonOverrides(
+  meta: Record<string, string>,
+  built: { inputJson: Record<string, unknown>; outputJson: Record<string, unknown> },
+): { inputJson: Record<string, unknown>; outputJson: Record<string, unknown> } {
+  const customIn = parseMetaJsonObject(meta.input_json);
+  const customOut = parseMetaJsonObject(meta.output_json);
+  return {
+    inputJson: customIn ?? built.inputJson,
+    outputJson: customOut ?? built.outputJson,
+  };
+}
+
 function catalogListsFromMeta(meta: Record<string, string>): {
   inputs: string[];
   outputs: string[];
@@ -225,7 +252,11 @@ export function mockRuntimeForNode(
   const tools = TOOL_POOL.filter((_, i) => (h >> i) & 1).slice(0, 3);
   if (!tools.length) tools.push(TOOL_POOL[h % TOOL_POOL.length]);
 
-  const { inputJson, outputJson } = buildNodeIoPayload(node, plan);
+  const built = buildNodeIoPayload(node, plan);
+  const { inputJson, outputJson } = applySavedJsonOverrides(
+    node.metadata || {},
+    built,
+  );
   const catalogLists = catalogListsFromMeta(node.metadata || {});
 
   return {

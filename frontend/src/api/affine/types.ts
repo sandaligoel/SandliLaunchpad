@@ -113,6 +113,10 @@ export interface GraphNode {
   description?: string | null;
   inputs?: string[];
   outputs?: string[];
+  /** User-edited input payload shown in Step Details (JSON object). */
+  input_json?: Record<string, unknown> | null;
+  /** User-edited output payload shown in Step Details (JSON object). */
+  output_json?: Record<string, unknown> | null;
 }
 
 export interface GraphEdge {
