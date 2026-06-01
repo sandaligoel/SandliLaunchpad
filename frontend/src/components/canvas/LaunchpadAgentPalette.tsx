@@ -66,7 +66,7 @@ export function LaunchpadAgentPalette({
   const { reuse, build } = groupDecisions(plan);
 
   return (
-    <aside className="w-64 shrink-0 border-r border-border bg-surface flex flex-col">
+    <aside className="launchpad-builder-sidebar w-64 shrink-0 border-r border-border bg-surface flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <Boxes size={14} /> Launchpad agents

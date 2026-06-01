@@ -17,7 +17,7 @@ export interface GraphBuildResult {
 }
 
 export async function planToFlowGraph(plan: ArchitecturePlan): Promise<GraphBuildResult> {
-  const structure = buildGraphStructure(plan);
+  const structure = buildGraphStructure(plan, { includeLaneChrome: false });
   const { nodes, meta } = await calculateLayout(
     structure.nodes,
     structure.edges,
@@ -51,7 +51,7 @@ export async function planToFlowGraph(plan: ArchitecturePlan): Promise<GraphBuil
 
 /** @deprecated sync stub — use planToFlowGraph */
 export function planToFlowGraphSync(plan: ArchitecturePlan): GraphBuildResult {
-  const structure = buildGraphStructure(plan);
+  const structure = buildGraphStructure(plan, { includeLaneChrome: false });
   return {
     nodes: structure.nodes,
     edges: structure.edges,

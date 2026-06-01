@@ -5,6 +5,7 @@ import { applyMeasuredDimensions, measureNode, type NodeDimensions } from "@/arc
 import { logCollisionReport, resolveCollisions, type Bounds } from "@/architecture-flow/layout/collision";
 import { layoutSubgraphWithElk } from "@/architecture-flow/layout/elkLaneLayout";
 import type { ParallelHint } from "@/architecture-flow/lib/buildGraphStructure";
+import { layoutSequentialPipeline } from "@/architecture-flow/layout/sequentialPipelineLayout";
 
 export interface LayoutMeta {
   parallel: ParallelHint | null;
@@ -35,7 +36,7 @@ function sortByPipeline(nodes: Node<FlowNodeData>[]): Node<FlowNodeData>[] {
 
 async function layoutLaneRow(
   laneNodes: Node<FlowNodeData>[],
-  edges: Edge<FlowEdgeData>[],
+  _edges: Edge<FlowEdgeData>[],
   sizes: Map<string, NodeDimensions>,
   startX: number,
   laneY: number,
@@ -44,15 +45,7 @@ async function layoutLaneRow(
   const positions = new Map<string, { x: number; y: number }>();
   if (!laneNodes.length) return { positions, usedWidth: 0 };
 
-  const ids = laneNodes.map((n) => n.id);
-  if (ids.length >= 3) {
-    const elk = await layoutSubgraphWithElk(ids, laneNodes, edges, sizes, "RIGHT");
-    for (const [id, pos] of elk.positions) {
-      positions.set(id, { x: startX + pos.x, y: laneY + pos.y });
-    }
-    return { positions, usedWidth: elk.width + LAYOUT.lanePadX };
-  }
-
+  // Left-to-right in pipeline order (do not let ELK reorder sequential steps).
   let x = startX + LAYOUT.lanePadX;
   for (const n of sortByPipeline(laneNodes)) {
     const dim = sizes.get(n.id)!;
@@ -129,8 +122,13 @@ function laneContentHeight(
 export async function calculateLayout(
   nodes: Node<FlowNodeData>[],
   edges: Edge<FlowEdgeData>[],
-  parallel: ParallelHint | null
+  parallel: ParallelHint | null,
+  options?: { sequential?: boolean },
 ): Promise<{ nodes: Node<FlowNodeData>[]; meta: LayoutMeta }> {
+  if (options?.sequential !== false) {
+    return layoutSequentialPipeline(nodes, edges, parallel);
+  }
+
   const layoutNodes = nodes.filter(
     (n) => !n.id.startsWith("__lane_") && n.type !== "laneBand"
   );

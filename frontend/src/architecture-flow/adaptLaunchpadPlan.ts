@@ -13,6 +13,7 @@ import type {
   GraphNodeType,
   PlanReuseDecision,
 } from "@/architecture-flow/types/plan";
+import { computeFlowOrder } from "@/utils/flowOrder";
 
 function mapNodeType(type: GuruNode["type"]): GraphNodeType {
   if (type === "gateway") return "api";
@@ -73,6 +74,9 @@ export function adaptGuruPlanToFlowPlan(
   guru: GuruPlan,
   catalogAgents: AgentDef[],
 ): FlowPlan {
+  const flowOrder = computeFlowOrder(guru.graph);
+  const orderRank = new Map(flowOrder.map((id, i) => [id, i]));
+
   const nodes: GraphNode[] = guru.graph.nodes.map((node, idx) => {
     const decision = guru.reuse_decisions.find((d) => d.node_id === node.id);
     const agent =
@@ -94,11 +98,11 @@ export function adaptGuruPlanToFlowPlan(
           ? (agent as { function_summary?: string }).function_summary
           : undefined) ??
         decision?.rationale,
-      layer: idx + 1,
+      layer: (orderRank.get(node.id) ?? idx) + 1,
       catalog_agent_id: agent?.type ?? node.agent_id ?? undefined,
       reuse_decision: decision?.decision,
       metadata: {
-        pipeline_order: String(idx + 1),
+        pipeline_order: String((orderRank.get(node.id) ?? idx) + 1),
         catalog_inputs: JSON.stringify(inputs),
         catalog_outputs: JSON.stringify(outputs),
       },

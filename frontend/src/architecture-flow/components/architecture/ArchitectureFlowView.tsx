@@ -17,7 +17,11 @@ import type { ArchitecturePlan, FlowNodeData } from "@/architecture-flow/types/p
 import { findReuseDecisionForNode, resolveCatalogConfidence } from "@/architecture-flow/lib/planReuse";
 import { useSimulation } from "@/architecture-flow/hooks/useSimulation";
 import { useGraphViewport } from "@/architecture-flow/hooks/useGraphViewport";
-import { defaultFitViewOptions } from "@/architecture-flow/layout/viewport";
+import {
+  defaultFitViewOptions,
+  fullscreenFitViewOptions,
+} from "@/architecture-flow/layout/viewport";
+import { Maximize2 } from "lucide-react";
 import { AnimatedEdge } from "@/architecture-flow/components/edges/AnimatedEdge";
 import { InputNode } from "@/architecture-flow/components/nodes/InputNode";
 import { OrchestratorNode } from "@/architecture-flow/components/nodes/OrchestratorNode";
@@ -99,31 +103,30 @@ function FlowInner({
     currentStepId,
   } = useSimulation(plan);
 
-  const { translateExtent, applyFit, focusNode, viewportConfig } = useGraphViewport(
-    nodes,
-    layoutLoading,
-    layoutMeta
-  );
+  const { translateExtent, applyFit, applyFullscreenFit, focusNode, viewportConfig } =
+    useGraphViewport(nodes, layoutLoading, layoutMeta);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [layoutDebug, setLayoutDebug] = useState(DEBUG_LAYOUT);
   const [fullscreen, setFullscreen] = useState(false);
 
-  const enterFullscreen = useCallback(async () => {
+  const fitToScreen = useCallback(async () => {
     if (simulating) stop();
     setFullscreen(true);
     document.body.classList.add("launchpad-arch-fullscreen");
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
-    await applyFit("full");
-  }, [applyFit, simulating, stop]);
+    await applyFullscreenFit();
+  }, [applyFullscreenFit, simulating, stop]);
 
   const exitFullscreen = useCallback(() => {
     setFullscreen(false);
     document.body.classList.remove("launchpad-arch-fullscreen");
-    window.dispatchEvent(new Event("resize"));
-  }, []);
+    requestAnimationFrame(() => {
+      void applyFit("full");
+    });
+  }, [applyFit]);
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -144,13 +147,30 @@ function FlowInner({
     if (!builderShell) return;
     const onRun = () => run();
     const onStop = () => stop();
+    const onFitScreen = () => void fitToScreen();
     window.addEventListener("launchpad:sim-run", onRun);
     window.addEventListener("launchpad:sim-stop", onStop);
+    window.addEventListener("launchpad:fit-screen", onFitScreen);
     return () => {
       window.removeEventListener("launchpad:sim-run", onRun);
       window.removeEventListener("launchpad:sim-stop", onStop);
+      window.removeEventListener("launchpad:fit-screen", onFitScreen);
     };
-  }, [builderShell, run, stop]);
+  }, [builderShell, run, stop, fitToScreen]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    let t: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(t);
+      t = setTimeout(() => void applyFullscreenFit(), 200);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [fullscreen, applyFullscreenFit]);
 
   useEffect(() => {
     if (simulating && currentStepId) {
@@ -247,7 +267,7 @@ function FlowInner({
     <div
       className={
         fullscreen
-          ? "fixed inset-0 z-[500] flex flex-col bg-canvas"
+          ? "fixed inset-0 z-[500] flex flex-col bg-canvas pt-11"
           : "flex h-full min-h-0 flex-col"
       }
     >
@@ -267,11 +287,12 @@ function FlowInner({
           )}
           <button
             type="button"
-            onClick={() => void enterFullscreen()}
-            className="rounded-lg border border-border bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
-            title="Full screen workflow view"
+            onClick={() => void fitToScreen()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-100 hover:bg-blue-500/20"
+            title="Show the entire workflow full screen"
           >
-            Fit all
+            <Maximize2 size={14} aria-hidden />
+            Fit to screen
           </button>
           <button
             type="button"
@@ -314,15 +335,32 @@ function FlowInner({
       )}
 
       {fullscreen && (
-        <button
-          type="button"
-          onClick={exitFullscreen}
-          className="absolute right-3 top-3 z-[600] flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-slate-900/90 text-lg font-light text-white shadow-lg backdrop-blur-md transition hover:bg-slate-800 hover:border-white/40"
-          title="Exit full screen (Esc)"
-          aria-label="Exit full screen"
-        >
-          ×
-        </button>
+        <div className="absolute left-0 right-0 top-0 z-[600] flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/90 px-4 py-2 backdrop-blur-md">
+          <p className="text-xs text-slate-300">
+            <span className="font-semibold text-white">Full screen</span>
+            <span className="mx-2 text-slate-600">·</span>
+            Entire workflow fitted to view
+            <span className="mx-2 text-slate-600">·</span>
+            <span className="text-slate-500">Esc to exit</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void applyFullscreenFit()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
+            >
+              <Maximize2 size={14} aria-hidden />
+              Refit
+            </button>
+            <button
+              type="button"
+              onClick={exitFullscreen}
+              className="rounded-lg border border-white/20 bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex min-h-0 min-w-0 flex-1">
@@ -382,6 +420,20 @@ function FlowInner({
                     )}
                   </div>
                 </Panel>
+                {builderShell && (
+                  <Panel position="top-right" className="!m-2 !p-0">
+                    <button
+                      type="button"
+                      onClick={() => void fitToScreen()}
+                      disabled={layoutLoading}
+                      className="inline-flex items-center gap-2 rounded-lg border border-blue-500/50 bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      title="Show the entire workflow on full screen"
+                    >
+                      <Maximize2 size={15} aria-hidden />
+                      Fit to screen
+                    </button>
+                  </Panel>
+                )}
               </>
             )}
             <Controls

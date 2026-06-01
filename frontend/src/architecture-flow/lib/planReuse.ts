@@ -80,22 +80,33 @@ export function resolveCatalogConfidence(
   return null;
 }
 
+/** Steps that appear in the builder palette and walkthrough metrics. */
+export function isWorkflowStepNode(n: GraphNode): boolean {
+  return (
+    n.type === "agent" ||
+    n.type === "custom" ||
+    n.type === "gateway" ||
+    n.type === "api" ||
+    n.type === "human"
+  );
+}
+
 export function countReuseStats(plan: ArchitecturePlan | null) {
   if (!plan?.nodes?.length) {
     return { agents: 0, reuse: 0, adapt: 0, build: 0, catalog: 0 };
   }
-  const agents = plan.nodes.filter((n) => n.type === "agent");
+  const steps = plan.nodes.filter(isWorkflowStepNode);
   let reuse = 0;
   let adapt = 0;
   let build = 0;
-  agents.forEach((a) => {
-    const d = getNodeReuseDecision(plan, a);
+  for (const step of steps) {
+    const d = getNodeReuseDecision(plan, step);
     if (d === "reuse") reuse++;
     else if (d === "adapt") adapt++;
     else build++;
-  });
+  }
   return {
-    agents: agents.length,
+    agents: steps.length,
     reuse,
     adapt,
     build,

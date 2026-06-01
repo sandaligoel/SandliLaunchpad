@@ -22,18 +22,46 @@ function agentKind(reuse?: string): FlowNodeKind {
   return "agent-build";
 }
 
-function classifyAgentLane(label: string, desc: string): FlowLane {
+function isIntakeLike(n: GraphNode): boolean {
+  const t = `${n.label} ${n.description || ""}`.toLowerCase();
+  return (
+    n.type === "data_store" ||
+    n.type === "api" ||
+    t.includes("intake") ||
+    t.includes("entrypoint") ||
+    t.includes("upload")
+  );
+}
+
+function classifyAgentLane(label: string, desc: string, nodeType?: string): FlowLane {
   const t = `${label} ${desc}`.toLowerCase();
+  if (
+    nodeType === "data_store" ||
+    nodeType === "api" ||
+    t.includes("intake") ||
+    t.includes("entrypoint") ||
+    t.includes("upload")
+  ) {
+    return "input";
+  }
   if (t.includes("merge") || t.includes("aggregat") || t.includes("violation report"))
     return "merge";
-  if (t.includes("gate") || t.includes("block") || t.includes("decision") || t.includes("score"))
+  if (
+    t.includes("routing gate") ||
+    t.includes("blocking gate") ||
+    t.includes("block/") ||
+    (t.includes("decision") && !t.includes("gateway"))
+  ) {
     return "merge";
-  if (t.includes("intake") || t.includes("reference")) return "input";
+  }
+  if (t.includes("human") || t.includes("analyst review") || t.includes("hitl"))
+    return "hitl";
   return "execution";
 }
 
 function isMergeNode(n: GraphNode): boolean {
   const t = `${n.label} ${n.description || ""}`.toLowerCase();
+  if (isIntakeLike(n)) return false;
   return (
     t.includes("merge") ||
     t.includes("aggregat") ||
@@ -45,7 +73,13 @@ function isMergeNode(n: GraphNode): boolean {
 
 function isDecisionNode(n: GraphNode): boolean {
   const t = `${n.label} ${n.description || ""}`.toLowerCase();
-  return t.includes("gate") || t.includes("block") || t.includes("until all checks");
+  if (isIntakeLike(n)) return false;
+  return (
+    t.includes("routing gate") ||
+    t.includes("blocking gate") ||
+    t.includes("block/") ||
+    t.includes("until all checks")
+  );
 }
 
 function isStepNode(n: GraphNode): boolean {
@@ -56,38 +90,63 @@ function isStepNode(n: GraphNode): boolean {
   );
 }
 
-/** Full left-to-right pipeline order (intake → orchestrator → steps → human). */
+/** Topological order from plan edges (sources → sinks). */
+function topoSortPlanNodes(
+  nodes: GraphNode[],
+  edges: { source: string; target: string }[],
+): GraphNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = nodes.map((n) => n.id);
+  const inDeg = new Map(ids.map((id) => [id, 0]));
+  const adj = new Map(ids.map((id) => [id, [] as string[]]));
+
+  for (const e of edges) {
+    if (!byId.has(e.source) || !byId.has(e.target) || e.source === e.target) continue;
+    adj.get(e.source)!.push(e.target);
+    inDeg.set(e.target, (inDeg.get(e.target) ?? 0) + 1);
+  }
+
+  const queue = ids.filter((id) => (inDeg.get(id) ?? 0) === 0);
+  if (queue.length === 0 && ids.length > 0) queue.push(ids[0]!);
+
+  const order: string[] = [];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+    for (const nxt of adj.get(id) ?? []) {
+      inDeg.set(nxt, (inDeg.get(nxt) ?? 0) - 1);
+      if ((inDeg.get(nxt) ?? 0) <= 0) queue.push(nxt);
+    }
+  }
+  for (const id of ids) {
+    if (!seen.has(id)) order.push(id);
+  }
+  return order.map((id) => byId.get(id)!).filter(Boolean);
+}
+
+/** Full left-to-right pipeline order from graph edges (sources → sinks). */
 export function orderedPipelineSteps(plan: ArchitecturePlan): GraphNode[] {
   const nodes = plan.nodes || [];
   const edges = plan.edges || [];
-  const entry = nodes.filter((n) => n.type === "data_store" || n.type === "api");
-  const orch = nodes.find((n) => n.type === "orchestrator");
-  const human = nodes.find((n) => n.type === "human");
-  const steps = nodes.filter(isStepNode);
+  if (nodes.length <= 1) return nodes;
 
-  const orderedSteps: GraphNode[] = [];
-  const seen = new Set<string>();
-  const walk = (nodeId: string) => {
-    if (!nodeId || seen.has(nodeId)) return;
-    seen.add(nodeId);
-    const node = steps.find((n) => n.id === nodeId);
-    if (node) orderedSteps.push(node);
-    edges.filter((e) => e.source === nodeId).forEach((e) => walk(e.target));
-  };
+  const topo = topoSortPlanNodes(nodes, edges);
+  const topoRank = new Map(topo.map((n, i) => [n.id, i]));
 
-  if (orch) walk(orch.id);
-
-  steps
-    .sort((a, b) => {
-      const ao = Number(a.metadata?.pipeline_order || a.layer || 0);
-      const bo = Number(b.metadata?.pipeline_order || b.layer || 0);
-      return ao - bo;
-    })
-    .forEach((a) => {
-      if (!seen.has(a.id)) orderedSteps.push(a);
-    });
-
-  return [...entry, ...(orch ? [orch] : []), ...orderedSteps, ...(human ? [human] : [])];
+  return [...nodes].sort((a, b) => {
+    const topoA = topoRank.get(a.id) ?? 0;
+    const topoB = topoRank.get(b.id) ?? 0;
+    if (topoA !== topoB) return topoA - topoB;
+    const intakeA = isIntakeLike(a) ? 0 : 1;
+    const intakeB = isIntakeLike(b) ? 0 : 1;
+    if (intakeA !== intakeB) return intakeA - intakeB;
+    const ao = Number(a.metadata?.pipeline_order || a.layer || 0);
+    const bo = Number(b.metadata?.pipeline_order || b.layer || 0);
+    return ao - bo;
+  });
 }
 
 export function orderedAgents(plan: ArchitecturePlan): GraphNode[] {
@@ -151,6 +210,32 @@ function ensurePipelineConnectivity(
 }
 
 export function detectParallel(plan: ArchitecturePlan, agents: GraphNode[]): ParallelHint | null {
+  const agentIds = new Set(agents.map((a) => a.id));
+  const planEdges = plan.edges || [];
+
+  /** Fan-out in the saved plan (e.g. gateway → two agent chains). */
+  for (const n of plan.nodes) {
+    const targets = planEdges
+      .filter((e) => e.source === n.id && agentIds.has(e.target))
+      .map((e) => e.target);
+    const branches = targets.filter((tid) => {
+      const a = agents.find((x) => x.id === tid);
+      return (
+        a &&
+        !isMergeNode(a) &&
+        classifyAgentLane(a.label, a.description || "", a.type) === "execution"
+      );
+    });
+    if (branches.length >= 2) {
+      const mergeId = agents.find(isMergeNode)?.id ?? null;
+      return {
+        forkAfterId: n.id,
+        branchIds: branches.slice(0, 4),
+        mergeId,
+      };
+    }
+  }
+
   const orchText = (plan.spec_summary?.orchestration_pattern || "").toLowerCase();
   const flowText = (plan.spec_summary?.flow_steps || "").toLowerCase();
   if (!orchText.includes("parallel") && !flowText.includes("parallel")) return null;
@@ -179,7 +264,8 @@ export function detectParallel(plan: ArchitecturePlan, agents: GraphNode[]): Par
     );
     if (exec.length >= 2) {
       branchIds.push(exec[0].id, exec[1].id);
-      forkAfterId = agents[0]?.id ?? null;
+      const firstIdx = agents.findIndex((a) => a.id === exec[0].id);
+      forkAfterId = firstIdx > 0 ? agents[firstIdx - 1]!.id : null;
     }
   } else {
     const firstBranchIdx = agents.findIndex((a) => a.id === branchIds[0]);
@@ -229,62 +315,82 @@ export interface GraphStructure {
   parallel: ParallelHint | null;
 }
 
-export function buildGraphStructure(plan: ArchitecturePlan): GraphStructure {
+export function buildGraphStructure(
+  plan: ArchitecturePlan,
+  options?: { includeLaneChrome?: boolean },
+): GraphStructure {
   const nodes: Node<FlowNodeData>[] = [];
   const edges: Edge<FlowEdgeData>[] = [];
-  const agents = orderedAgents(plan);
+  const pipelineOrder = orderedPipelineSteps(plan);
+  const orderRank = new Map(pipelineOrder.map((n, i) => [n.id, i]));
+  const agents = pipelineOrder.filter(isStepNode);
   const parallel = detectParallel(plan, agents);
   const parallelSet = new Set(parallel?.branchIds ?? []);
 
-  const laneKeys: FlowLane[] = ["input", "orchestration", "execution", "merge", "hitl"];
-  for (const lane of laneKeys) {
-    nodes.push({
-      id: `__lane_${lane}`,
-      type: "laneLabel",
-      position: { x: 0, y: 0 },
-      selectable: false,
-      draggable: false,
-      data: {
-        kind: "lane-label",
-        label:
-          lane === "input"
-            ? "INPUT"
-            : lane === "orchestration"
-              ? "ORCHESTRATION"
-              : lane === "execution"
-                ? "EXECUTION"
-                : lane === "merge"
-                  ? "MERGE & DECISION"
-                  : "HUMAN-IN-THE-LOOP",
-        lane,
-        runtime: mockRuntimeForNode({ id: lane, type: "tool", label: "" }),
-      },
-    });
+  if (options?.includeLaneChrome) {
+    const laneKeys: FlowLane[] = ["input", "orchestration", "execution", "merge", "hitl"];
+    for (const lane of laneKeys) {
+      nodes.push({
+        id: `__lane_${lane}`,
+        type: "laneLabel",
+        position: { x: 0, y: 0 },
+        selectable: false,
+        draggable: false,
+        data: {
+          kind: "lane-label",
+          label:
+            lane === "input"
+              ? "INPUT"
+              : lane === "orchestration"
+                ? "ORCHESTRATION"
+                : lane === "execution"
+                  ? "EXECUTION"
+                  : lane === "merge"
+                    ? "MERGE & DECISION"
+                    : "HUMAN-IN-THE-LOOP",
+          lane,
+          runtime: mockRuntimeForNode({ id: lane, type: "tool", label: "" }),
+        },
+      });
+    }
   }
 
-  const entry = plan.nodes.filter((n) => n.type === "data_store" || n.type === "api");
-  const orch = plan.nodes.find((n) => n.type === "orchestrator");
-  const human = plan.nodes.find((n) => n.type === "human");
+  const entry = pipelineOrder.filter((n) => n.type === "data_store" || n.type === "api");
+  const orch = pipelineOrder.find((n) => n.type === "orchestrator");
+  const human = pipelineOrder.find((n) => n.type === "human");
 
-  for (const n of entry) nodes.push(toFlowNode(plan, n, "input", "input"));
-  if (orch) nodes.push(toFlowNode(plan, orch, "orchestrator", "orchestration"));
+  const pushNode = (
+    node: GraphNode,
+    kind: FlowNodeKind,
+    lane: FlowLane,
+    extra: Partial<FlowNodeData> = {},
+  ) => {
+    const rank = orderRank.get(node.id) ?? 0;
+    const withOrder = {
+      ...node,
+      metadata: { ...node.metadata, pipeline_order: String(rank + 1) },
+      layer: rank + 1,
+    };
+    nodes.push(toFlowNode(plan, withOrder, kind, lane, extra));
+  };
+
+  for (const n of entry) pushNode(n, "input", "input");
+  if (orch) pushNode(orch, "orchestrator", "orchestration");
 
   for (const a of agents) {
     let kind = agentKind(a.reuse_decision);
-    let lane = classifyAgentLane(a.label, a.description || "");
+    let lane = classifyAgentLane(a.label, a.description || "", a.type);
     if (isMergeNode(a)) {
       kind = isDecisionNode(a) ? "decision" : "merge";
       lane = "merge";
     }
     const branchIdx = parallel?.branchIds.indexOf(a.id) ?? -1;
-    nodes.push(
-      toFlowNode(plan, a, kind, lane, {
-        branchLabel: branchIdx >= 0 ? `Branch ${branchIdx + 1}` : undefined,
-      })
-    );
+    pushNode(a, kind, lane, {
+      branchLabel: branchIdx >= 0 ? `Branch ${branchIdx + 1}` : undefined,
+    });
   }
 
-  if (human) nodes.push(toFlowNode(plan, human, "human", "hitl"));
+  if (human) pushNode(human, "human", "hitl");
 
   const addEdge = (
     source: string,
@@ -335,18 +441,6 @@ export function buildGraphStructure(plan: ArchitecturePlan): GraphStructure {
             : "sequential";
     if (!edges.some((x) => x.source === e.source && x.target === e.target)) {
       addEdge(e.source, e.target, kind, e.label);
-    }
-  }
-
-  if (human) {
-    const mergeN = parallel?.mergeId;
-    const lastExec = [...agents]
-      .reverse()
-      .find((a) => !parallelSet.has(a.id) && a.id !== mergeN);
-    if (lastExec && !edges.some((e) => e.target === human.id)) {
-      addEdge(lastExec.id, human.id, "retry", "escalate");
-    } else if (mergeN && !edges.some((e) => e.target === human.id)) {
-      addEdge(mergeN, human.id, "retry", "escalate");
     }
   }
 

@@ -131,3 +131,11 @@ export const defaultFitViewOptions = {
   maxZoom: VIEWPORT.fitMaxZoom,
   duration: 420,
 } as const;
+
+/** Fit entire graph when entering full-screen presentation. */
+export const fullscreenFitViewOptions = {
+  padding: 0.1,
+  minZoom: VIEWPORT.fitMinZoom,
+  maxZoom: 1.12,
+  duration: 480,
+} as const;

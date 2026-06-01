@@ -12,29 +12,20 @@ import { buildGraphStructure, type GraphStructure } from "@/architecture-flow/li
 import { calculateLayout, type LayoutMeta } from "@/architecture-flow/layout/calculateLayout";
 
 function walkOrder(nodes: Node<FlowNodeData>[], edges: Edge<FlowEdgeData>[]): string[] {
-  const orch = nodes.find((n) => n.data.kind === "orchestrator");
-  const order: string[] = [];
-  const seen = new Set<string>();
-  const visit = (id: string) => {
-    if (seen.has(id)) return;
-    seen.add(id);
-    const n = nodes.find((x) => x.id === id);
-    if (
-      n &&
+  const layoutNodes = nodes.filter(
+    (n) =>
       !n.id.startsWith("__lane_") &&
       n.type !== "laneLabel" &&
       n.type !== "laneBand" &&
-      n.type !== "parallelGroup"
-    ) {
-      order.push(id);
-    }
-    edges.filter((e) => e.source === id).forEach((e) => visit(e.target));
-  };
-  if (orch) visit(orch.id);
-  nodes.forEach((n) => {
-    if (!seen.has(n.id) && !n.id.startsWith("__")) visit(n.id);
-  });
-  return order;
+      n.type !== "parallelGroup",
+  );
+  return [...layoutNodes]
+    .sort(
+      (a, b) =>
+        (a.data.pipelineOrder ?? 0) - (b.data.pipelineOrder ?? 0) ||
+        a.id.localeCompare(b.id),
+    )
+    .map((n) => n.id);
 }
 
 function isLayoutNode(n: Node<FlowNodeData>): boolean {
@@ -99,7 +90,7 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     }
     let cancelled = false;
     (async () => {
-      const structure = buildGraphStructure(plan);
+      const structure = buildGraphStructure(plan, { includeLaneChrome: false });
       if (cancelled) return;
       structureRef.current = structure;
       await runLayout(structure);

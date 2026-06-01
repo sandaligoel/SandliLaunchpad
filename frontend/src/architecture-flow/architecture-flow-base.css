@@ -118,3 +118,8 @@ body.launchpad-arch-fullscreen .arch-flow-host {
   height: 100% !important;
   min-height: 100% !important;
 }
+
+body.launchpad-arch-fullscreen .launchpad-builder-sidebar,
+body.launchpad-arch-fullscreen .builder-inspector-column {
+  display: none !important;
+}

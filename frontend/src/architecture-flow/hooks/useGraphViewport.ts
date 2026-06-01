@@ -6,6 +6,7 @@ import {
   computeGraphBounds,
   computeTranslateExtent,
   defaultFitViewOptions,
+  fullscreenFitViewOptions,
   nodesForFitMode,
   type FitMode,
   VIEWPORT,
@@ -35,8 +36,7 @@ export function useGraphViewport(
   const applyFit = useCallback(
     async (mode: FitMode = "full", selectionIds?: string[]) => {
       const focusNodes = nodesForFitMode(nodes, mode, selectionIds);
-      const fitOpts: any = { ...defaultFitViewOptions };
-      // When focusNodes is undefined, "Fit all" should include the whole canvas.
+      const fitOpts: Parameters<typeof fitView>[0] = { ...defaultFitViewOptions };
       if (focusNodes) {
         fitOpts.nodes = focusNodes;
       }
@@ -44,6 +44,20 @@ export function useGraphViewport(
     },
     [fitView, nodes]
   );
+
+  const applyFullscreenFit = useCallback(async () => {
+    const pipelineNodes = nodes.filter(
+      (n) =>
+        !n.id.startsWith("__lane_") &&
+        n.type !== "laneLabel" &&
+        n.type !== "laneBand" &&
+        n.type !== "parallelGroup",
+    );
+    await fitView({
+      ...fullscreenFitViewOptions,
+      nodes: pipelineNodes.length ? pipelineNodes : undefined,
+    });
+  }, [fitView, nodes]);
 
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -103,6 +117,7 @@ export function useGraphViewport(
     bounds,
     translateExtent,
     applyFit,
+    applyFullscreenFit,
     focusNode,
     viewportConfig: VIEWPORT,
     defaultFitViewOptions,

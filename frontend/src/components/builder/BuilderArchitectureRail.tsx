@@ -52,9 +52,7 @@ export function BuilderArchitectureRail({ plan, catalogAgents }: Props) {
     window.dispatchEvent(new CustomEvent("launchpad:sim-stop"));
   }, []);
 
-  const agentCount = plan.graph.nodes.filter(
-    (n) => n.type === "agent" || n.type === "custom" || n.type === "gateway",
-  ).length;
+  const agentCount = stats.agents;
 
   return (
     <div className="builder-inspector-column">
