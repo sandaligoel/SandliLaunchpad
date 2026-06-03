@@ -24,7 +24,7 @@ body,
 }
 
 .animate-flow-dash {
-  animation: flow-dash 0.85s linear infinite;
+  animation: flow-dash 6s linear infinite;
 }
 
 /* Simulation mode — subtle canvas tint */

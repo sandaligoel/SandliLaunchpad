@@ -86,8 +86,8 @@ EXPLICIT_FINISH_KEYWORDS = (
     "complete",
     "generate",
     "done",
-    "proceed",
 )
+MIN_ANSWERS_BEFORE_AUTO_COMPLETE = 6
 
 # Wired automatically from upstream agents — do not ask the business user.
 _SKIP_INPUT_SUBSTRINGS = (
@@ -328,8 +328,8 @@ def _polish_question_text(
     text = " ".join((question or "").split())
     if not text:
         text = (
-            f"How should {agent_name} handle {human_input_label(input_name)} "
-            f"in this workflow?"
+            f"What configuration should {agent_name} use for "
+            f"{human_input_label(input_name)} in this workflow?"
         )
     if "?" not in text:
         text = text.rstrip(".") + "?"
@@ -371,7 +371,15 @@ def _explicit_finish_requested(user_answer: str | None) -> bool:
     if not user_answer:
         return False
     low = user_answer.lower()
-    return any(k in low for k in EXPLICIT_FINISH_KEYWORDS)
+    # Avoid false positives from normal conversational uses of words like "proceed".
+    return bool(
+        re.search(
+            r"\b(we are|i am|i'm)?\s*(ready to (finish|complete|generate)|"
+            r"finish (the )?interview|complete (the )?interview|"
+            r"generate (the )?(result|report|recommendation)|done)\b",
+            low,
+        )
+    ) or any(re.search(rf"\b{k}\b", low) for k in EXPLICIT_FINISH_KEYWORDS)
 
 
 def _completion_gate(
@@ -381,7 +389,12 @@ def _completion_gate(
 ) -> tuple[bool, str | None]:
     pending = _pending_questions(state)
     high_impact_left = [q for q in pending if q.impact_score > 65]
+    answered_count = sum(1 for v in state.answers.values() if str(v).strip())
 
+    if answered_count < MIN_ANSWERS_BEFORE_AUTO_COMPLETE and not _explicit_finish_requested(
+        user_answer
+    ):
+        return False, None
     if not high_impact_left:
         return True, "no_high_impact_inputs_remaining"
     if state.question_count >= min(state.question_budget, state.hard_cap):
@@ -1022,9 +1035,9 @@ def _question_item_to_interview(
 
     topic = q.cluster or q.agent_name
     why = (
-        f"Configures {human_input_label(q.input_name)} for **{q.agent_name}** "
-        f"so the workflow can run end-to-end."
-    ).replace("**", "")
+        f"Defines {human_input_label(q.input_name)} for {q.agent_name} "
+        f"so the deployed workflow is executable end-to-end."
+    )
 
     return InterviewQuestion(
         field_key=q.field_key,

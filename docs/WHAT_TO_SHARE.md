@@ -18,6 +18,7 @@ They need the same values you use in `backend/.env`:
 | `AZURE_OPENAI_API_KEY` | |
 | `AZURE_OPENAI_CHAT_DEPLOYMENT` | e.g. `gpt-4.1` |
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | e.g. `text-embedding-3-small` |
+| `AZURE_OPENAI_VIDEO_DEPLOYMENT` | Optional — Sora deployment for **Image to Video** studio (e.g. `sora-2`) |
 | `AZURE_SEARCH_ENDPOINT` | Agent catalog search |
 | `AZURE_SEARCH_API_KEY` | |
 | `AZURE_SEARCH_INDEX_NAME` | e.g. `agentic-launchpad` |

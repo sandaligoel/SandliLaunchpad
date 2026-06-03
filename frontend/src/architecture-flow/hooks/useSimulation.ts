@@ -43,7 +43,12 @@ export interface SimulationState {
   currentStepLabel: string;
   currentStepId: string | null;
   progress: number;
+  /** Milliseconds each pipeline step stays highlighted during simulation. */
+  stepDurationMs: number;
 }
+
+/** Time per step in the architecture walkthrough (increase for a slower demo). */
+export const SIMULATION_STEP_DURATION_MS = 4000;
 
 export function useSimulation(plan: ArchitecturePlan | null) {
   const [nodes, setNodes] = useState<Node<FlowNodeData>[]>([]);
@@ -232,7 +237,7 @@ export function useSimulation(plan: ArchitecturePlan | null) {
         })
       );
       i += 1;
-      timerRef.current = setTimeout(tick, 1100);
+      timerRef.current = setTimeout(tick, SIMULATION_STEP_DURATION_MS);
     };
     tick();
   }, [applyHighlight, nodes, stop]);
@@ -292,6 +297,7 @@ export function useSimulation(plan: ArchitecturePlan | null) {
     currentStepLabel,
     currentStepId,
     progress,
+    stepDurationMs: SIMULATION_STEP_DURATION_MS,
   };
 
   return {

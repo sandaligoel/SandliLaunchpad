@@ -10,6 +10,8 @@ config/runtime-ports.json
 
 # Backend runtime data (use Azure Blob in shared env)
 backend/data/sessions/
+backend/data/media_jobs/*
+!backend/data/media_jobs/.gitkeep
 backend/data/blob_mirror/
 backend/homebrew/
 

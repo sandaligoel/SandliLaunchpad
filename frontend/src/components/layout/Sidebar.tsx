@@ -6,11 +6,13 @@ import {
   Boxes,
   Sparkles,
   MessageSquare,
+  Video,
 } from "lucide-react";
 import { Logo } from "./Logo";
 
 const NAV = [
   { to: "/interview", label: "Agent Launchpad", icon: MessageSquare },
+  { to: "/image-video", label: "Image to Video", icon: Video },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/builder", label: "Workflow Builder", icon: Sparkles },
   { to: "/workflows", label: "Workflows", icon: Workflow },

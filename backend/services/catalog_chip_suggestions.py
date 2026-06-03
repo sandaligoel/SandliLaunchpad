@@ -230,7 +230,7 @@ def contextual_chips_from_conversation(
     return _dedupe_chips(chips)[:5]
 
 
-# Higher = easier first question for non-technical users.
+# Higher = preferred first topic for practitioner interviews.
 _FIELD_EASE_SCORE: dict[str, float] = {
     "integrations": 3.0,
     "hitl_behavior": 2.6,
@@ -284,7 +284,7 @@ def easy_question_for_project(
     field_key: str,
     settings: Settings,
 ) -> str:
-    """Plain, easy first question grounded in the closest catalog delivery pattern."""
+    """First interview question grounded in the closest catalog delivery pattern."""
     hook = spec.problem_statement.strip()
     if len(hook) > 72:
         hook = hook[:72].rsplit(" ", 1)[0]
@@ -295,20 +295,20 @@ def easy_question_for_project(
     if field_key == "integrations":
         if project and vertical:
             return _normalize_chip(
-                f"For this work ({hook}), should inputs and outputs work like our "
-                f"{vertical} deliveries — files, email, or a case system?"
+                f"For ({hook}), which integrations match your {vertical} reference pattern — "
+                f"file ingest, API, email, or case management system?"
             )
         return _normalize_chip(
-            f"For this work ({hook}), where should requests come in and where should results go?"
+            f"For ({hook}), which source and sink integrations are required (API, files, CRM, warehouse)?"
         )
 
     if field_key == "hitl_behavior":
         if project and "review" in (project.solution_summary or "").lower():
             return _normalize_chip(
-                f"For this work ({hook}), should a person review results before they are final?"
+                f"For ({hook}), is a human approval gate required before downstream systems consume outputs?"
             )
         return _normalize_chip(
-            f"For this work ({hook}), who should check results — every time or only when something looks wrong?"
+            f"For ({hook}), what HITL policy applies — always-on review, threshold-based, or exception-only?"
         )
 
     if field_key == "architectural_flow":
@@ -316,25 +316,25 @@ def easy_question_for_project(
         if len(steps) >= 3:
             chain = " → ".join(_normalize_chip(s) for s in steps[:4])
             return _normalize_chip(
-                f"For this work ({hook}), is your process close to: {chain}?"
+                f"For ({hook}), does your target pipeline align with: {chain}?"
             )
         return _normalize_chip(
-            f"For this work ({hook}), what happens first, what happens next, and how does it finish?"
+            f"For ({hook}), what is the end-to-end sequence from trigger through completion?"
         )
 
     if field_key == "core_components":
         return _normalize_chip(
-            f"For this work ({hook}), what are the main parts you need — like intake, checks, review, and report?"
+            f"For ({hook}), which logical components are required (ingestion, scoring, HITL, reporting)?"
         )
 
     if field_key == "data_flow":
         return _normalize_chip(
-            f"For this work ({hook}), should each step hand work to the next or use one shared record?"
+            f"For ({hook}), should stages use direct handoffs or a shared operational datastore?"
         )
 
     if field_key == "orchestration_model":
         return _normalize_chip(
-            f"For this work ({hook}), should the next step start on its own or wait for someone to trigger it?"
+            f"For ({hook}), should orchestration be sequential, parallel, event-driven, or manual?"
         )
 
     label = field_key.replace("_", " ")

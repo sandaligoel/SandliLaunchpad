@@ -54,11 +54,13 @@ function SimulationCanvasBanner({
   stepIndex,
   stepTotal,
   currentStepLabel,
+  stepDurationMs,
 }: {
   simulating: boolean;
   stepIndex: number;
   stepTotal: number;
   currentStepLabel: string;
+  stepDurationMs: number;
 }) {
   if (!simulating || stepTotal === 0) return null;
   return (
@@ -73,6 +75,9 @@ function SimulationCanvasBanner({
         <p className="text-sm font-semibold text-white">
           Step {Math.min(stepIndex + 1, stepTotal)} / {stepTotal}
           {currentStepLabel ? ` — ${currentStepLabel}` : ""}
+        </p>
+        <p className="text-[10px] text-blue-200/90">
+          {Math.round(stepDurationMs / 1000)}s per step
         </p>
       </div>
     </div>
@@ -409,6 +414,7 @@ function FlowInner({
                     stepIndex={stepIndex}
                     stepTotal={simulationState.stepTotal}
                     currentStepLabel={simulationState.currentStepLabel}
+                    stepDurationMs={simulationState.stepDurationMs}
                   />
                 </Panel>
                 <Panel position="top-left" className="!m-2 !p-0">

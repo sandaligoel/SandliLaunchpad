@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkflowsRouteImport } from './routes/workflows'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as InterviewRouteImport } from './routes/interview'
+import { Route as ImageVideoRouteImport } from './routes/image-video'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BuilderRouteImport } from './routes/builder'
 import { Route as AgentsRouteImport } from './routes/agents'
@@ -30,6 +31,11 @@ const TemplatesRoute = TemplatesRouteImport.update({
 const InterviewRoute = InterviewRouteImport.update({
   id: '/interview',
   path: '/interview',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImageVideoRoute = ImageVideoRouteImport.update({
+  id: '/image-video',
+  path: '/image-video',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/agents': typeof AgentsRoute
   '/builder': typeof BuilderRoute
   '/dashboard': typeof DashboardRoute
+  '/image-video': typeof ImageVideoRoute
   '/interview': typeof InterviewRoute
   '/templates': typeof TemplatesRoute
   '/workflows': typeof WorkflowsRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsRoute
   '/builder': typeof BuilderRoute
   '/dashboard': typeof DashboardRoute
+  '/image-video': typeof ImageVideoRoute
   '/interview': typeof InterviewRoute
   '/templates': typeof TemplatesRoute
   '/workflows': typeof WorkflowsRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/agents': typeof AgentsRoute
   '/builder': typeof BuilderRoute
   '/dashboard': typeof DashboardRoute
+  '/image-video': typeof ImageVideoRoute
   '/interview': typeof InterviewRoute
   '/templates': typeof TemplatesRoute
   '/workflows': typeof WorkflowsRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/builder'
     | '/dashboard'
+    | '/image-video'
     | '/interview'
     | '/templates'
     | '/workflows'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/builder'
     | '/dashboard'
+    | '/image-video'
     | '/interview'
     | '/templates'
     | '/workflows'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/builder'
     | '/dashboard'
+    | '/image-video'
     | '/interview'
     | '/templates'
     | '/workflows'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   AgentsRoute: typeof AgentsRoute
   BuilderRoute: typeof BuilderRoute
   DashboardRoute: typeof DashboardRoute
+  ImageVideoRoute: typeof ImageVideoRoute
   InterviewRoute: typeof InterviewRoute
   TemplatesRoute: typeof TemplatesRoute
   WorkflowsRoute: typeof WorkflowsRoute
@@ -142,6 +155,13 @@ declare module '@tanstack/react-router' {
       path: '/interview'
       fullPath: '/interview'
       preLoaderRoute: typeof InterviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/image-video': {
+      id: '/image-video'
+      path: '/image-video'
+      fullPath: '/image-video'
+      preLoaderRoute: typeof ImageVideoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentsRoute: AgentsRoute,
   BuilderRoute: BuilderRoute,
   DashboardRoute: DashboardRoute,
+  ImageVideoRoute: ImageVideoRoute,
   InterviewRoute: InterviewRoute,
   TemplatesRoute: TemplatesRoute,
   WorkflowsRoute: WorkflowsRoute,

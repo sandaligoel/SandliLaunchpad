@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from config import Settings
 from pipeline.spec_loader import CatalogLoadResult, load_catalog_json
@@ -16,6 +17,11 @@ from services.catalog_hints import fetch_catalog_hints
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]{3,}")
+_CATALOG_CACHE: dict[str, Any] = {
+    "path": None,
+    "mtime_ns": None,
+    "result": CatalogLoadResult(),
+}
 
 
 def _catalog_path(settings: Settings) -> Path:
@@ -33,7 +39,23 @@ def _load_catalog(settings: Settings) -> CatalogLoadResult:
     if not path.is_file() or path.suffix.lower() != ".json":
         return CatalogLoadResult()
     try:
-        return load_catalog_json(path)
+        stat = path.stat()
+        mtime_ns = int(getattr(stat, "st_mtime_ns", 0))
+        cache_path = _CATALOG_CACHE.get("path")
+        cache_mtime = _CATALOG_CACHE.get("mtime_ns")
+        if cache_path == str(path) and cache_mtime == mtime_ns:
+            cached = _CATALOG_CACHE.get("result")
+            if isinstance(cached, CatalogLoadResult):
+                return cached
+    except Exception:
+        # If stat fails unexpectedly, fall through to normal load.
+        mtime_ns = None
+    try:
+        loaded = load_catalog_json(path)
+        _CATALOG_CACHE["path"] = str(path)
+        _CATALOG_CACHE["mtime_ns"] = mtime_ns
+        _CATALOG_CACHE["result"] = loaded
+        return loaded
     except Exception as exc:
         logger.warning("Could not load spec.json for interview context: %s", exc)
         return CatalogLoadResult()

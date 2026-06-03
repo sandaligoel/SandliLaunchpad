@@ -1,6 +1,9 @@
 import type { ArchitectureResponse, SessionResponse } from "./types";
 
 const API_BASE = import.meta.env.VITE_AFFINE_API_BASE ?? "";
+const DIRECT_API_TARGET = (
+  import.meta.env.VITE_AFFINE_API_TARGET ?? ""
+).replace(/\/$/, "");
 const REQUEST_TIMEOUT_MS = 20_000;
 const INTERVIEW_TIMEOUT_MS = 180_000;
 const HEALTH_TIMEOUT_MS = 12_000;
@@ -69,24 +72,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function healthUrls(): string[] {
+  const urls = [`${API_BASE}/health`];
+  if (
+    DIRECT_API_TARGET &&
+    !urls.some((u) => u === `${DIRECT_API_TARGET}/health`)
+  ) {
+    urls.push(`${DIRECT_API_TARGET}/health`);
+  }
+  return urls;
+}
+
 export async function checkAffineHealth(): Promise<AffineHealthResponse> {
   let last: unknown;
+  const urls = healthUrls();
   for (let attempt = 0; attempt < HEALTH_RETRIES; attempt++) {
-    try {
-      const res = await fetchWithTimeout(
-        `${API_BASE}/health`,
-        undefined,
-        HEALTH_TIMEOUT_MS,
-      );
-      if (!res.ok) {
-        throw new AffineApiError(`Health check failed (${res.status})`, res.status);
+    for (const url of urls) {
+      try {
+        const res = await fetchWithTimeout(url, undefined, HEALTH_TIMEOUT_MS);
+        if (!res.ok) {
+          throw new AffineApiError(
+            `Health check failed (${res.status})`,
+            res.status,
+          );
+        }
+        return res.json() as Promise<AffineHealthResponse>;
+      } catch (err) {
+        last = err;
       }
-      return res.json() as Promise<AffineHealthResponse>;
-    } catch (err) {
-      last = err;
-      if (attempt < HEALTH_RETRIES - 1) {
-        await sleep(800 * (attempt + 1));
-      }
+    }
+    if (attempt < HEALTH_RETRIES - 1) {
+      await sleep(800 * (attempt + 1));
     }
   }
   throw last instanceof Error ? last : new Error("Health check failed");

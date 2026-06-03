@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from api.media_routes import media_router
 from api.routes import router
 from config import configure_logging, get_settings
 from services.data_storage import get_data_storage, get_storage_status
@@ -43,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(media_router)
 
 
 @app.on_event("startup")
@@ -81,7 +83,7 @@ def health() -> dict:
     return {
         "status": "ok" if ok else "degraded",
         "phase": 3,
-        "features": ["interview", "architecture_plan"],
+        "features": ["interview", "architecture_plan", "image_to_video"],
         "storage": storage,
     }
 

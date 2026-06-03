@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 
 RECENT_MESSAGE_LIMIT = 6
 DETAILED_FLOW_MIN_CHARS = 80
+CATALOG_HINT_REFRESH_USER_TURN_EVERY = 3
 
 # Plain-language chip fallbacks when the model returns few options.
 _DEFAULT_CHIPS: dict[str, list[str]] = {
@@ -113,31 +114,32 @@ _DEFAULT_CHIPS: dict[str, list[str]] = {
     ],
 }
 
+# Internal branding only — allow HITL, API, orchestration, RAG in practitioner-facing text.
 _FORBIDDEN_QUESTION_PHRASES = re.compile(
-    r"\b(affine|catalog agent|built agent|our agent|agentic|llm|rag|vector|"
-    r"orchestrat|deployment|hitl\b|api\b|mcp\b)\b",
+    r"\b(affine analytics|affine launchpad|catalog agent|built agent|our agent|"
+    r"agentic launchpad|from our catalog|spec\.json)\b",
     re.I,
 )
 
 # One-line scope per topic (prompt + validation). Not a fixed question script.
 _TOPIC_FOCUS: dict[str, str] = {
     "hitl_behavior": (
-        "hitl_behavior — Who must review or approve, and when (every case vs exceptions only)."
+        "hitl_behavior — HITL gates: roles, approval policy (always vs threshold vs exception-only)."
     ),
     "integrations": (
-        "integrations — Where work enters and where outputs must be sent (systems, files, email)."
+        "integrations — Source/destination systems, APIs, files, and event channels."
     ),
     "architectural_flow": (
-        "architectural_flow — Step order from start to finish in their real process."
+        "architectural_flow — End-to-end pipeline sequence, triggers, and branches."
     ),
     "data_flow": (
-        "data_flow — How information moves between steps (handoffs vs one shared record)."
+        "data_flow — Data handoffs vs shared store (case record, lake, operational DB)."
     ),
     "core_components": (
-        "core_components — Main blocks in plain words (intake, checks, review, report)."
+        "core_components — Logical services/modules (ingestion, scoring, HITL queue, reporting)."
     ),
     "orchestration_model": (
-        "orchestration_model — Automatic sequence, parallel steps, or manual triggers."
+        "orchestration_model — Sequential, parallel, event-driven, or manual step triggers."
     ),
 }
 
@@ -157,7 +159,7 @@ def _catalog_agent_names(spec: ArchitectureSpec) -> list[str]:
 
 
 def _sanitize_user_facing_text(text: str, spec: ArchitectureSpec) -> str:
-    """Strip internal jargon from questions and chips (keep catalog agent names)."""
+    """Strip internal product branding from questions and chips (keep technical terms)."""
     del spec
     out = _FORBIDDEN_QUESTION_PHRASES.sub("", text)
     out = re.sub(r"\s{2,}", " ", out).strip(" ,—-")
@@ -175,28 +177,28 @@ def _fallback_question_for_field(
 
     questions: dict[str, str] = {
         "hitl_behavior": (
-            f"For this work ({hook}), who should review results before anything "
-            "is finalized — and is that every time or only in some cases?"
+            f"For ({hook}), what HITL approval policy applies — mandatory review, "
+            "threshold-based, or exception-only?"
         ),
         "integrations": (
-            f"For this work ({hook}), where should data come from and where "
-            "should results be saved (email, files, CRM, database, or other)?"
+            f"For ({hook}), which systems should ingest data and which should "
+            "receive outputs (API, files, CRM, warehouse, email)?"
         ),
         "architectural_flow": (
-            f"For this work ({hook}), what is the order of steps from when "
-            "work starts until it is finished?"
+            f"For ({hook}), what is the end-to-end pipeline sequence from trigger "
+            "through completion, including key branches?"
         ),
         "core_components": (
-            f"For this work ({hook}), what are the main parts you need "
-            "(for example intake, checks, review, final output)?"
+            f"For ({hook}), which logical components are required "
+            "(e.g. ingestion, rules engine, HITL queue, reporting API)?"
         ),
         "data_flow": (
-            f"For this work ({hook}), how should information move between steps — "
-            "handed step to step, or kept in one shared place?"
+            f"For ({hook}), should steps hand off payloads directly or read/write "
+            "a shared case record or operational datastore?"
         ),
         "orchestration_model": (
-            f"For this work ({hook}), should steps run automatically in order, "
-            "in parallel when possible, or wait for someone to start them?"
+            f"For ({hook}), should orchestration be sequential, parallel where "
+            "possible, event-driven, or manually triggered per stage?"
         ),
     }
     q = questions.get(
@@ -828,7 +830,7 @@ def _question_from_parsed(
         chips = fallback_chips
     elif _FORBIDDEN_QUESTION_PHRASES.search(question):
         question = fallback_q
-    question = _make_question_plain(question)
+    question = _polish_interview_question(question)
     if _should_use_user_only_question(question) or not _question_scope_ok(
         question, field_key
     ):
@@ -900,30 +902,22 @@ def _question_from_parsed(
     )
 
 
-def _make_question_plain(question: str) -> str:
-    """
-    Force simple, business-friendly wording for non-technical users.
-    """
+def _polish_interview_question(question: str, *, max_words: int = 48) -> str:
+    """Light polish for practitioner-facing questions — keep technical vocabulary."""
     q = re.sub(r"\s+", " ", question.strip())
-    replacements = {
-        "architectural flow": "step order",
-        "core components": "main parts",
-        "integrations": "systems",
-        "orchestration": "how steps run",
-    }
-    for old, new in replacements.items():
-        q = re.sub(old, new, q, flags=re.I)
-    # Strip catalog/project-style references from question text.
-    q = re.sub(r"\b(closest match|top match|from our catalog|spec\.json)\b", "", q, flags=re.I)
+    q = re.sub(
+        r"\b(closest match|top match|from our catalog|spec\.json|affine launchpad)\b",
+        "",
+        q,
+        flags=re.I,
+    )
     q = re.sub(r"\s{2,}", " ", q).strip(" ,.;:-")
-    # Keep option choices out of question text; chips should carry options.
     q = re.sub(r"[\u2014:\-]\s*[^?]*\b(?:or|and/or)\b[^?]*\??$", "", q, flags=re.I).strip(
         " ,.;:-"
     )
-    # Keep questions short and direct.
     words = q.split()
-    if len(words) > 24:
-        q = " ".join(words[:24]).rstrip(",.;:")
+    if len(words) > max_words:
+        q = " ".join(words[:max_words]).rstrip(",.;:")
     if not q.endswith("?"):
         q = q.rstrip(".") + "?"
     return q
@@ -941,7 +935,7 @@ def _build_catalog_backed_question(
     This avoids hard-to-understand LLM wording while keeping chips dynamic from spec.json.
     """
     if _user_interview_answer_count(messages) == 0:
-        question = _make_question_plain(
+        question = _polish_interview_question(
             easy_question_for_project(spec, field_key, settings)
         )
     else:
@@ -990,36 +984,40 @@ def _user_only_question_for_field(spec: ArchitectureSpec, field_key: str) -> str
         hook = hook[:70].rsplit(" ", 1)[0] + "…"
     prompts = {
         "hitl_behavior": (
-            f"For this work ({hook}), who should review results: every case or only exceptions?"
+            f"For ({hook}), what HITL policy applies — always-on review, "
+            "confidence threshold, or exception-only?"
         ),
         "integrations": (
-            f"For this work ({hook}), where does data come from and where should results go?"
+            f"For ({hook}), which source and destination integrations are required "
+            "(API, batch files, CRM, warehouse)?"
         ),
         "architectural_flow": (
-            f"For this work ({hook}), what step order should happen from start to finish?"
+            f"For ({hook}), define the pipeline sequence from trigger to completion."
         ),
         "core_components": (
-            f"For this work ({hook}), what main parts do you need (intake, checks, review, output)?"
+            f"For ({hook}), which services/modules are required in the architecture?"
         ),
         "data_flow": (
-            f"For this work ({hook}), should each step pass work to the next or use one shared record?"
+            f"For ({hook}), use step-to-step handoffs or a shared operational datastore?"
         ),
         "orchestration_model": (
-            f"For this work ({hook}), should the next step start automatically or wait for a person?"
+            f"For ({hook}), prefer sequential, parallel, event-driven, or manual triggers?"
         ),
     }
-    return _make_question_plain(prompts.get(field_key, f"What should happen for {field_key}?"))
+    return _polish_interview_question(
+        prompts.get(field_key, f"What configuration is required for {field_key}?")
+    )
 
 
 def _should_use_user_only_question(question: str) -> bool:
     text = (question or "").strip()
     if not text:
         return True
-    if len(text.split()) > 22:
+    if len(text.split()) > 52:
         return True
     if _FORBIDDEN_QUESTION_PHRASES.search(text):
         return True
-    if re.search(r"\b(match|catalog|agent|spec\.json)\b", text, flags=re.I):
+    if re.search(r"\b(spec\.json|from our catalog|catalog agent)\b", text, flags=re.I):
         return True
     return False
 
@@ -1244,9 +1242,9 @@ def _clarifying_to_interview_question(
     return InterviewQuestion(
         field_key=clarifying_field_key(item.id),
         topic_label="Scope",
-        question=_make_question_plain(item.question),
+        question=_polish_interview_question(item.question),
         chips=scope_chips,
-        why_it_matters=item.why_it_matters or "Helps match the right catalog delivery pattern.",
+        why_it_matters=item.why_it_matters or "Narrows agent selection and pipeline ordering.",
         suggested_chip=suggested,
         catalog_reference=catalog_ref or None,
         suggestion_reason=(
@@ -1351,12 +1349,19 @@ def run_interview_turn(
         fields_just_set=fields_just_set,
     )
 
-    refresh_query = (
-        f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
-    )
-    session.spec.catalog_hints = build_catalog_hints_for_interview(
-        refresh_query, settings, top_k=8
-    )
+    should_refresh_hints = not session.spec.catalog_hints
+    if not should_refresh_hints:
+        user_turns = sum(1 for msg in session.messages if msg.role == "user")
+        should_refresh_hints = (
+            user_turns % CATALOG_HINT_REFRESH_USER_TURN_EVERY == 0
+        )
+    if should_refresh_hints:
+        refresh_query = (
+            f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
+        )
+        session.spec.catalog_hints = build_catalog_hints_for_interview(
+            refresh_query, settings, top_k=8
+        )
 
     if session.spec.status == "ready":
         return _finalize_session(session, settings, client)
@@ -1436,9 +1441,9 @@ def _start_clarifying_phase(
     )
     session.pending_question = question
     intro = (
-        "I'll start with a few short questions so we can match your needs to "
-        "the right capabilities in our agent catalog. Pick the closest option "
-        "or describe your own answer. "
+        "I'll ask a few scoping questions to align your requirements with the "
+        "right agents and architecture pattern. Select the closest option or "
+        "provide a precise answer in chat. "
     )
     session.messages.append(
         ChatMessage(
@@ -1464,4 +1469,4 @@ def start_session(problem_statement: str, settings: Settings) -> InterviewSessio
     )
 
     client = make_client(settings)
-    return _begin_main_interview(session, settings, client)
+    return _start_clarifying_phase(session, settings, client)

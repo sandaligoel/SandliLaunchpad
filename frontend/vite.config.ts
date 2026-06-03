@@ -45,19 +45,27 @@ function resolveAffineApiTarget(): string {
 export default defineConfig(() => {
   const ports = loadMergedPorts();
   const affineTarget = resolveAffineApiTarget();
+  const localDevOnly = process.env.AFFINE_LOCAL_DEV === "1";
 
   console.log(`[affine] Vite proxy → ${affineTarget} (from config/runtime-ports.json)`);
+  if (localDevOnly) {
+    console.log("[affine] AFFINE_LOCAL_DEV=1 — Cloudflare plugin disabled for local dev");
+  }
+
+  const plugins = [
+    ...(localDevOnly
+      ? []
+      : [cloudflare({ viteEnvironment: { name: "ssr" } })]),
+    tanstackStart({
+      server: { entry: "server" },
+    }),
+    react(),
+    tailwindcss(),
+    tsconfigPaths(),
+  ];
 
   return {
-    plugins: [
-      cloudflare({ viteEnvironment: { name: "ssr" } }),
-      tanstackStart({
-        server: { entry: "server" },
-      }),
-      react(),
-      tailwindcss(),
-      tsconfigPaths(),
-    ],
+    plugins,
     server: {
       port: ports.uiPort,
       strictPort: false,
