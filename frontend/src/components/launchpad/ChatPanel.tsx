@@ -89,6 +89,13 @@ export function ChatPanel({
   const customChip = chipsWithOther.find(isCustomDescribeChip);
   const canReply = session && !ready && session.pending_question && !loading;
   const workflow = session?.agent_workflow;
+  const nearWorkflowEnd =
+    (workflow?.coverage_score ?? 0) >= 70 ||
+    (workflow?.critical_items?.length ?? 0) === 0;
+  const loadingMessage =
+    session && nearWorkflowEnd
+      ? "Generating your architecture plan (15–30s)…"
+      : "Preparing next question (usually 10–25s)…";
   const topicLabel = session?.pending_question?.topic_label?.trim();
   const whyItMatters = session?.pending_question?.why_it_matters?.trim();
   const suggestionReason = session?.pending_question?.suggestion_reason?.trim();
@@ -186,7 +193,7 @@ export function ChatPanel({
         {loading ? (
           <div className="chat-bubble chat-bubble--assistant chat-bubble--typing">
             <span className="chat-bubble__role">Launchpad</span>
-            <p>Preparing next question (usually 10–25s)…</p>
+            <p>{loadingMessage}</p>
           </div>
         ) : null}
         <div ref={bottomRef} />

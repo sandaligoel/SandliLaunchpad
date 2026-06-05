@@ -119,7 +119,7 @@ def build_catalog_hints_for_interview(
     query: str,
     settings: Settings,
     *,
-    top_k: int = 8,
+    top_k: int = 12,
     preferred_agent_ids: list[str] | None = None,
 ) -> list[CatalogHint]:
     """
@@ -161,7 +161,7 @@ def build_catalog_hints_for_interview(
         for agent, kw_score in ranked:
             if agent.id in seen:
                 continue
-            if kw_score < 0.08:
+            if kw_score < 0.05:
                 continue
             seen.add(agent.id)
             merged.append(_hint_from_agent(agent, min(0.75, kw_score)))
@@ -251,7 +251,7 @@ def format_catalog_brief_for_interview(
     lines = ["REFERENCE PROJECTS (spec.json, ranked by fit):", ""]
     if not top:
         return format_catalog_for_interview_prompt(
-            build_catalog_hints_for_interview(query, settings, top_k=8)
+            build_catalog_hints_for_interview(query, settings, top_k=12)
         )
 
     for rank, (project, agents, score) in enumerate(top, 1):

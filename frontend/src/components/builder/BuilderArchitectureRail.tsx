@@ -65,8 +65,6 @@ export function BuilderArchitectureRail({
     window.dispatchEvent(new CustomEvent("launchpad:sim-stop"));
   }, []);
 
-  const agentCount = stats.agents;
-
   return (
     <div className="builder-inspector-column">
       <div className="builder-arch-rail-compact">
@@ -96,22 +94,22 @@ export function BuilderArchitectureRail({
           ) : null}
         </section>
         <section className="builder-arch-rail__section !py-2">
-          <div className="builder-arch-metrics">
+          <div className="builder-arch-metrics" title="Workflow steps in this plan">
             <span>
-              <strong>{agentCount || stats.agents}</strong>
-              Agents
+              <strong>{stats.steps}</strong>
+              Steps
             </span>
-            <span>
-              <strong>{parallel}</strong>
-              Par
+            <span title="Steps from spec.json catalog (reuse or adapt)">
+              <strong>{stats.catalog}</strong>
+              Catalog
             </span>
-            <span>
-              <strong>{stats.reuse + stats.adapt}</strong>
-              Reuse
-            </span>
-            <span>
+            <span title="Custom or net-new steps (build)">
               <strong>{stats.build}</strong>
               Build
+            </span>
+            <span title="Parallel branches">
+              <strong>{parallel}</strong>
+              Par
             </span>
           </div>
         </section>

@@ -1,13 +1,10 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { MessageSquare, Plus, Workflow } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { Topbar } from "@/components/layout/Topbar";
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowPresentationProvider } from "@/context/WorkflowPresentationContext";
-import { AgentPalette } from "@/components/canvas/AgentPalette";
-import { CanvasEditor } from "@/components/canvas/CanvasEditor";
-import { ConfigPanel } from "@/components/canvas/ConfigPanel";
-import { Console } from "@/components/canvas/Console";
-import { BuilderToolbar } from "@/components/canvas/BuilderToolbar";
 import { LaunchpadBuilder } from "@/components/builder/LaunchpadBuilder";
 import { resolveBuilderSessionIdAsync } from "@/api/affine/builderStorage";
 
@@ -31,6 +28,50 @@ export const Route = createFileRoute("/builder")({
   }),
   component: Builder,
 });
+
+function BuilderEmptyState() {
+  return (
+    <AppShell>
+      <Topbar
+        title="Workflow Builder"
+        subtitle="Architecture canvas from Agent Launchpad"
+      />
+      <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+        <div className="max-w-md space-y-2">
+          <h2 className="text-lg font-semibold">No workflow open yet</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Complete an Agent Launchpad chat and generate an architecture plan, or
+            open a saved workflow from your workspace.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/interview"
+            search={{ fresh: "1" }}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            <Plus size={16} aria-hidden />
+            Start new chat
+          </Link>
+          <Link
+            to="/workflows"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+          >
+            <Workflow size={16} aria-hidden />
+            Open saved workflow
+          </Link>
+          <Link
+            to="/interview"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+          >
+            <MessageSquare size={16} aria-hidden />
+            Continue interview
+          </Link>
+        </div>
+      </main>
+    </AppShell>
+  );
+}
 
 function Builder() {
   const { sessionId: urlSessionId } = Route.useSearch();
@@ -84,32 +125,5 @@ function Builder() {
     );
   }
 
-  return (
-    <AppShell>
-      <ReactFlowProvider>
-        <WorkflowPresentationProvider>
-        <BuilderToolbar />
-        <div className="flex-1 flex min-h-0">
-          <AgentPalette />
-          <div className="flex-1 flex flex-col min-w-0">
-            <CanvasEditor />
-            <Console />
-          </div>
-          <ConfigPanel />
-        </div>
-        <p className="text-center text-sm text-muted-foreground py-4">
-          Complete an{" "}
-          <Link to="/interview" className="text-primary underline">
-            Agent Launchpad
-          </Link>{" "}
-          chat first, or open a saved workflow from{" "}
-          <Link to="/workflows" className="text-primary underline">
-            Workflows
-          </Link>
-          .
-        </p>
-        </WorkflowPresentationProvider>
-      </ReactFlowProvider>
-    </AppShell>
-  );
+  return <BuilderEmptyState />;
 }

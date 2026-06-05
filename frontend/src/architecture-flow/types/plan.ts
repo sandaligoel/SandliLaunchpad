@@ -1,3 +1,5 @@
+import type { StepComponentKind } from "@/utils/stepComponentKind";
+
 export type ReuseDecision = "reuse" | "adapt" | "build";
 
 export type GraphNodeType =
@@ -118,6 +120,9 @@ export interface FlowNodeData extends Record<string, unknown> {
   description?: string;
   lane: FlowLane;
   reuse?: ReuseDecision;
+  /** Agent (catalog), Tool (API/data), or Function (orchestration/HITL/custom). */
+  componentKind?: StepComponentKind;
+  catalogAgentName?: string;
   runtime: NodeRuntimeMeta;
   expanded?: boolean;
   pipelineOrder?: number;

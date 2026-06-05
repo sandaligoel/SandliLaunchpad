@@ -14,7 +14,11 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import type { ArchitecturePlan, FlowNodeData } from "@/architecture-flow/types/plan";
-import { findReuseDecisionForNode, resolveCatalogConfidence } from "@/architecture-flow/lib/planReuse";
+import {
+  findReuseDecisionForNode,
+  resolveCatalogConfidence,
+} from "@/architecture-flow/lib/planReuse";
+import { resolveStepComponentKind } from "@/utils/stepComponentKind";
 import { useSimulation } from "@/architecture-flow/hooks/useSimulation";
 import { useGraphViewport } from "@/architecture-flow/hooks/useGraphViewport";
 import {
@@ -32,6 +36,7 @@ import { ParallelGroupNode } from "@/architecture-flow/components/nodes/Parallel
 import { LaneLabelNode } from "@/architecture-flow/components/nodes/LaneLabelNode";
 import { LaneBandNode } from "@/architecture-flow/components/nodes/LaneBandNode";
 import { SimulationPanel } from "@/architecture-flow/components/panels/SimulationPanel";
+import { ComponentKindLegend } from "@/architecture-flow/components/nodes/shared";
 
 const nodeTypes = {
   input: InputNode,
@@ -194,14 +199,20 @@ function FlowInner({
       const graphNode = plan?.nodes.find((n) => n.id === node.id);
       const confidence = graphNode ? resolveCatalogConfidence(plan, graphNode) : null;
       const reuseRow = graphNode ? findReuseDecisionForNode(plan, graphNode) : undefined;
+      const reuse = node.data.reuse || graphNode?.reuse_decision || "build";
+      const componentKind =
+        node.data.componentKind ?? resolveStepComponentKind(graphNode, reuse);
       window.dispatchEvent(
         new CustomEvent("launchpad:node-detail", {
           detail: {
             id: node.id,
             label: node.data.label,
             description: node.data.description || "",
-            reuse: node.data.reuse || "build",
+            reuse,
             confidence,
+            componentKind,
+            catalogAgentName:
+              node.data.catalogAgentName ?? reuseRow?.agent_name ?? undefined,
             catalogRationale: reuseRow?.rationale,
             lane: node.data.lane,
             status: node.data.runtime.status,
@@ -417,7 +428,8 @@ function FlowInner({
                     stepDurationMs={simulationState.stepDurationMs}
                   />
                 </Panel>
-                <Panel position="top-left" className="!m-2 !p-0">
+                <Panel position="top-left" className="!m-2 !p-0 flex flex-col gap-2">
+                  <ComponentKindLegend />
                   <div className="rounded-md border border-border/80 bg-panel/90 px-2 py-1 text-[10px] text-slate-500 backdrop-blur-sm">
                     {simulating ? (
                       <span className="text-blue-300">Simulation running — follow the blue glow</span>
@@ -458,11 +470,14 @@ function FlowInner({
                 const d = n.data as FlowNodeData;
                 if (d?.isActive) return "#60a5fa";
                 if (d?.runtime?.status === "success") return "#34d399";
+                if (d?.componentKind === "agent") return "#22c55e";
+                if (d?.componentKind === "tool") return "#3b82f6";
+                if (d?.componentKind === "function") return "#a855f7";
                 const k = d?.kind;
-                if (k === "orchestrator") return "#3b82f6";
-                if (k?.startsWith("agent-reuse")) return "#22c55e";
+                if (k === "input") return "#38bdf8";
+                if (k === "orchestrator") return "#8b5cf6";
+                if (k?.startsWith("agent-")) return "#22c55e";
                 if (k === "human") return "#f97316";
-                if (k === "merge" || k === "decision") return "#a855f7";
                 return "#64748b";
               }}
               maskColor="rgba(6, 10, 16, 0.9)"

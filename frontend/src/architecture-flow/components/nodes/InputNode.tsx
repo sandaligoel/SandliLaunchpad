@@ -9,6 +9,7 @@ export function InputNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
       active={data.isActive}
       dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
+      componentKind={data.componentKind ?? "tool"}
     >
       <Handle type="source" position={Position.Right} className="!bg-slate-400 !w-2 !h-2" />
       <div className="p-3">

@@ -68,6 +68,105 @@
   line-height: 1.45;
 }
 
+.builder-step-catalog-ref {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.builder-step-catalog-ref strong {
+  color: #166534;
+  font-weight: 700;
+}
+
+.builder-step-sidebar--agent {
+  border-left: 4px solid #22c55e;
+}
+
+.builder-step-sidebar--tool {
+  border-left: 4px solid #3b82f6;
+}
+
+.builder-step-sidebar--function {
+  border-left: 4px solid #8b5cf6;
+}
+
+.builder-step-kind-banner {
+  flex-shrink: 0;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.builder-step-kind-banner__label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.builder-step-kind-banner__hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  opacity: 0.92;
+}
+
+.builder-step-kind-banner--agent {
+  background: linear-gradient(90deg, #dcfce7, #f0fdf4);
+  color: #14532d;
+}
+
+.builder-step-kind-banner--tool {
+  background: linear-gradient(90deg, #dbeafe, #eff6ff);
+  color: #1e3a8a;
+}
+
+.builder-step-kind-banner--function {
+  background: linear-gradient(90deg, #ede9fe, #f5f3ff);
+  color: #5b21b6;
+}
+
+.builder-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.builder-kind-badge--agent {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.builder-kind-badge--tool {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+.builder-kind-badge--function {
+  background: #f3e8ff;
+  color: #6b21a8;
+  border-color: #d8b4fe;
+}
+
+.builder-io-block-sublabel {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #94a3b8;
+}
+
 .builder-step-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -86,6 +185,11 @@
   margin: 0.1rem 0 0;
   color: #1e293b;
   font-weight: 600;
+}
+
+.builder-step-stats .builder-kind-badge {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.6rem;
 }
 
 .builder-io-section {
@@ -217,10 +321,24 @@
   gap: 0.35rem;
 }
 
-.builder-tools-list span {
+.builder-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.68rem;
   padding: 0.15rem 0.45rem;
   border-radius: 6px;
   background: #e2e8f0;
   color: #334155;
+}
+
+.builder-tool-chip-kind {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 0.05rem 0.25rem;
+  border-radius: 4px;
 }

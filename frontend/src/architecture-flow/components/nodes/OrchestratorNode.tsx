@@ -10,6 +10,7 @@ export function OrchestratorNode({ data, selected }: NodeProps<Node<FlowNodeData
       active={data.isActive}
       dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
+      componentKind={data.componentKind ?? "function"}
     >
       <Handle type="target" position={Position.Left} className="!bg-blue-400 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-blue-400 !w-2 !h-2" />

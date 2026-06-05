@@ -88,6 +88,8 @@ EXPLICIT_FINISH_KEYWORDS = (
     "done",
 )
 MIN_ANSWERS_BEFORE_AUTO_COMPLETE = 6
+TARGET_MATCHED_AGENTS = 6
+DEFAULT_MATCH_AGENT_LIMIT = 6
 
 # Wired automatically from upstream agents — do not ask the business user.
 _SKIP_INPUT_SUBSTRINGS = (
@@ -481,14 +483,19 @@ def _detect_vertical(query: str) -> str | None:
     return None
 
 
-def _match_agents(query: str, catalog: CatalogLoadResult, *, limit: int = 3) -> list[AgentRecord]:
+def _match_agents(
+    query: str,
+    catalog: CatalogLoadResult,
+    *,
+    limit: int = DEFAULT_MATCH_AGENT_LIMIT,
+) -> list[AgentRecord]:
     vertical = _detect_vertical(query)
     scored: list[tuple[float, AgentRecord]] = []
     for agent in catalog.agents:
         score = _keyword_score(query, agent)
         if vertical and agent.vertical not in (vertical, "Other"):
-            score *= 0.35
-        if score <= 0.05:
+            score *= 0.55
+        if score <= 0.03:
             continue
         scored.append((score, agent))
     scored.sort(key=lambda x: x[0], reverse=True)
@@ -502,6 +509,55 @@ def _match_agents(query: str, catalog: CatalogLoadResult, *, limit: int = 3) -> 
         if len(out) >= limit:
             break
     return out
+
+
+def _enrich_matched_agents(
+    matched: list[MatchedAgentSummary],
+    query: str,
+    catalog: CatalogLoadResult,
+    settings: Settings,
+    *,
+    target: int = TARGET_MATCHED_AGENTS,
+) -> list[MatchedAgentSummary]:
+    """Ensure every problem statement gets a multi-agent catalog chain."""
+    by_id = {a.id: a for a in catalog.agents}
+    seen = {m.agent_id for m in matched if m.agent_id}
+    out = list(matched)
+
+    for agent in _match_agents(query, catalog, limit=target):
+        if agent.id in seen:
+            continue
+        seen.add(agent.id)
+        out.append(
+            MatchedAgentSummary(
+                agent_id=agent.id,
+                name=agent.name,
+                reason=(agent.function_summary or "")[:140],
+            )
+        )
+        if len(out) >= target:
+            return out
+
+    hints = build_catalog_hints_for_interview(
+        query, settings, top_k=target, preferred_agent_ids=list(seen)
+    )
+    for hint in hints:
+        aid = str(hint.agent_id or "").strip()
+        if not aid or aid in seen:
+            continue
+        agent = by_id.get(aid)
+        out.append(
+            MatchedAgentSummary(
+                agent_id=aid,
+                name=hint.name or (agent.name if agent else aid),
+                reason=(hint.function_summary or "")[:140],
+            )
+        )
+        seen.add(aid)
+        if len(out) >= target:
+            break
+
+    return out[:target]
 
 
 def _input_satisfied_by_query(input_name: str, query: str) -> bool:
@@ -808,7 +864,7 @@ def _init_workflow_state(
     catalog = _load_catalog(settings)
     agents = _match_agents(query, catalog)
     if not agents:
-        agents = _load_spec_agents(settings)[:3]
+        agents = _load_spec_agents(settings)[:TARGET_MATCHED_AGENTS]
 
     brief = format_catalog_brief_for_interview(query, settings, top_projects=2)
     prior = _prior_context_block(session)
@@ -842,6 +898,12 @@ def _init_workflow_state(
         )
         state = _parse_llm_workflow(raw, catalog, query)
         if state and (state.matched_agents or state.questions):
+            state.matched_agents = _enrich_matched_agents(
+                state.matched_agents,
+                query,
+                catalog,
+                settings,
+            )
             if not state.matched_agents and agents:
                 state.matched_agents = [
                     MatchedAgentSummary(
@@ -865,14 +927,16 @@ def _init_workflow_state(
     except Exception as exc:
         logger.warning("Agent workflow LLM init failed: %s", exc)
 
-    matched = [
-        MatchedAgentSummary(
-            agent_id=a.id,
-            name=a.name,
-            reason=(a.function_summary or "")[:140],
-        )
-        for a in agents
-    ]
+    matched = _enrich_matched_agents([], query, catalog, settings)
+    if not matched:
+        matched = [
+            MatchedAgentSummary(
+                agent_id=a.id,
+                name=a.name,
+                reason=(a.function_summary or "")[:140],
+            )
+            for a in agents
+        ]
     state = AgentWorkflowState(
         query_understood=query[:200],
         matched_agents=matched,
@@ -1087,7 +1151,7 @@ def _catalog_hints_for_workflow(
     return build_catalog_hints_for_interview(
         session.spec.problem_statement,
         settings,
-        top_k=8,
+        top_k=12,
         preferred_agent_ids=hint_ids,
     )
 
@@ -1163,14 +1227,8 @@ def advance_agent_workflow_turn(
     if _workflow_is_complete(state, user_answer=user_answer):
         _set_phase(state, "completion_check", context="advance:completion_gate")
         session.spec.transcript_summary = format_workflow_configured(state, settings)
-        from services.interview import _finalize_session, update_spec
+        from services.interview import _finalize_session
 
-        session.spec = update_spec(
-            session.spec,
-            session.messages,
-            settings,
-            client=client,
-        )
         session.messages.append(
             ChatMessage(
                 role="assistant",

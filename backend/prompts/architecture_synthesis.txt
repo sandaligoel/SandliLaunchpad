@@ -23,7 +23,7 @@ Output ONLY valid JSON (no markdown wrapper). Schema:
 
 Rules:
 - Use ONLY information from the spec fields, conversation, and catalog hints. Do not invent integrations or components not mentioned.
-- Map reusable components to type "agent" and set agent_id when a catalog hint id matches.
+- **Catalog-first:** map every processing step to a catalog agent when a hint id matches; include 3–6 agents in graph_draft when hints are provided. Use type "custom" only when no hint applies.
 - graph_draft must be a single connected DAG left-to-right: edges only from earlier steps to later steps (no cycles).
 - Use kebab-case node ids. Include gateway at start, human nodes for HITL gates, agents/custom for processing, clear end step.
 - Every edge from_id and to_id must exist in nodes. No duplicate edges. No self-loops.

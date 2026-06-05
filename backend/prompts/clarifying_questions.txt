@@ -13,9 +13,10 @@ Relevant catalog capabilities (internal reference — cite capability areas, not
 """
 
 Rules:
-- Ask between 3 and 5 questions — each must materially change agent selection or pipeline order if answered differently.
-- Questions must be specific to THIS problem (data sources, SLAs, review gates, integrations, compliance, domain).
-- Use professional, technical language appropriate for experienced engineers, architects, or product owners (HITL, APIs, orchestration, batch vs streaming are fine).
+- Ask between 5 and 8 questions — each must materially change agent selection or pipeline order if answered differently.
+- Questions must be specific to THIS problem (data sources, data quality/normalization, review/approval gates, SLAs, integrations, compliance, error policy, domain constraints).
+- Use professional, technical language appropriate for experienced engineers, architects, or product owners (HITL, APIs, orchestration, batch vs streaming, idempotency/retries, confidence thresholds, auditability are fine).
+- Prefer logical ordering and coverage across the workflow lifecycle: (1) ingestion/inputs, (2) processing boundaries + triggers, (3) HITL/approvals + failure handling, (4) outputs + acceptance criteria/handoff, (5) integration targets (storage/search/tools).
 - Do NOT mention internal product names: "Affine catalog", "spec.json", or numbered agent SKUs unless the user already did.
 - Do NOT ask about budget, headcount, or generic "what is your tech stack" without tying to the workflow.
 - Do NOT propose a full solution yet — only reduce ambiguity.

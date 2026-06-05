@@ -91,22 +91,36 @@ export function isWorkflowStepNode(n: GraphNode): boolean {
   );
 }
 
-export function countReuseStats(plan: ArchitecturePlan | null) {
+export type WorkflowStepStats = {
+  /** All workflow steps in the plan (agents, gateways, human gates, etc.). */
+  steps: number;
+  reuse: number;
+  adapt: number;
+  build: number;
+  /** Steps mapped to catalog agents (reuse + adapt). */
+  catalog: number;
+  /** @deprecated Use `steps` — kept for older call sites. */
+  agents: number;
+};
+
+export function countReuseStats(plan: ArchitecturePlan | null): WorkflowStepStats {
   if (!plan?.nodes?.length) {
-    return { agents: 0, reuse: 0, adapt: 0, build: 0, catalog: 0 };
+    return { steps: 0, reuse: 0, adapt: 0, build: 0, catalog: 0, agents: 0 };
   }
-  const steps = plan.nodes.filter(isWorkflowStepNode);
+  const stepNodes = plan.nodes.filter(isWorkflowStepNode);
   let reuse = 0;
   let adapt = 0;
   let build = 0;
-  for (const step of steps) {
+  for (const step of stepNodes) {
     const d = getNodeReuseDecision(plan, step);
     if (d === "reuse") reuse++;
     else if (d === "adapt") adapt++;
     else build++;
   }
+  const steps = stepNodes.length;
   return {
-    agents: steps.length,
+    steps,
+    agents: steps,
     reuse,
     adapt,
     build,

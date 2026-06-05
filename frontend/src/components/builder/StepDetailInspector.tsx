@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { ReuseBadge } from "@/architecture-flow/components/nodes/shared";
 import type { ReuseDecision } from "@/architecture-flow/types/plan";
 import {
+  resolveStepComponentKind,
+  stepComponentKindHint,
+  stepComponentKindLabel,
+  type StepComponentKind,
+} from "@/utils/stepComponentKind";
+import {
   parseJsonObject,
   prettyJson,
   summarizeJsonEntries,
@@ -20,7 +26,23 @@ export type StepDetailPayload = {
   inputJson?: Record<string, unknown> | null;
   outputJson?: Record<string, unknown> | null;
   tools?: string[];
+  componentKind?: StepComponentKind;
+  catalogAgentName?: string;
 };
+
+function ComponentKindBadge({ kind }: { kind: StepComponentKind }) {
+  const cls =
+    kind === "agent"
+      ? "builder-kind-badge builder-kind-badge--agent"
+      : kind === "tool"
+        ? "builder-kind-badge builder-kind-badge--tool"
+        : "builder-kind-badge builder-kind-badge--function";
+  return (
+    <span className={cls} title={stepComponentKindHint(kind)}>
+      {stepComponentKindLabel(kind)}
+    </span>
+  );
+}
 
 type IoJsonKind = "input" | "output";
 
@@ -167,6 +189,8 @@ export function StepDetailInspector({
   }
 
   const reuse = (detail.reuse || "build") as ReuseDecision;
+  const componentKind =
+    detail.componentKind ?? resolveStepComponentKind(undefined, reuse);
   const confidenceText =
     detail.confidence != null
       ? `${Math.round(detail.confidence <= 1 ? detail.confidence * 100 : detail.confidence)}%`
@@ -174,8 +198,18 @@ export function StepDetailInspector({
         ? "N/A (build new)"
         : "—";
 
+  const sidebarKindClass = `builder-step-sidebar--${componentKind}`;
+
   return (
-    <div className="builder-step-sidebar">
+    <div className={`builder-step-sidebar ${sidebarKindClass}`}>
+      <div className={`builder-step-kind-banner builder-step-kind-banner--${componentKind}`}>
+        <span className="builder-step-kind-banner__label">
+          {stepComponentKindLabel(componentKind)}
+        </span>
+        <span className="builder-step-kind-banner__hint">
+          {stepComponentKindHint(componentKind)}
+        </span>
+      </div>
       <div className="builder-col-head">
         <div className="builder-col-kicker">Inspector</div>
         <h3>Step Details</h3>
@@ -184,14 +218,28 @@ export function StepDetailInspector({
         <div className="builder-step-header">
           <div className="flex items-start justify-between gap-2">
             <h4 className="builder-step-title">{detail.label}</h4>
-            <ReuseBadge reuse={reuse} />
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
+              <ComponentKindBadge kind={componentKind} />
+              <ReuseBadge reuse={reuse} />
+            </div>
           </div>
+          {detail.catalogAgentName && componentKind === "agent" ? (
+            <p className="builder-step-catalog-ref">
+              Catalog: <strong>{detail.catalogAgentName}</strong>
+            </p>
+          ) : null}
           {detail.description ? (
             <p className="builder-step-desc">{detail.description}</p>
           ) : null}
         </div>
 
         <dl className="builder-step-stats">
+          <div>
+            <dt>Component</dt>
+            <dd>
+              <ComponentKindBadge kind={componentKind} />
+            </dd>
+          </div>
           <div>
             <dt>Lane</dt>
             <dd className="capitalize">{detail.lane || "execution"}</dd>
@@ -212,10 +260,16 @@ export function StepDetailInspector({
 
         {detail.tools && detail.tools.length > 0 ? (
           <div>
-            <p className="builder-io-block-label">Tools used</p>
+            <p className="builder-io-block-label">
+              Supporting tools{" "}
+              <span className="builder-io-block-sublabel">(integrations)</span>
+            </p>
             <div className="builder-tools-list">
               {detail.tools.map((t) => (
-                <span key={t}>{t}</span>
+                <span key={t} className="builder-tool-chip" title="Integration tool">
+                  <span className="builder-tool-chip-kind">Tool</span>
+                  {t}
+                </span>
               ))}
             </div>
           </div>

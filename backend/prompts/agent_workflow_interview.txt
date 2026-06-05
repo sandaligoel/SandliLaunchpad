@@ -26,8 +26,9 @@ Convert a practitioner request into a build-ready agent workflow setup by:
 
 ## AGENT MATCHING GUIDANCE
 - Rank with function_summary + category + vertical + inputs/outputs + tech_stack + keywords.
-- Select top 1-3 agents unless clear multi-agent chain is required.
-- Respect vertical lock by default (Finance with Finance, Retail/CPG with Retail/CPG), unless query explicitly spans domains.
+- **Select 3–6 agents** for every problem — build a realistic multi-agent chain (intake, processing, validation, orchestration, delivery) using catalog agents from spec.json.
+- Prefer reusing existing agents over implying custom builds; only omit an agent when nothing in the catalog fits that step.
+- Respect vertical lock by default (Finance with Finance, Retail/CPG with Retail/CPG), but include cross-cutting agents (orchestrator, validator, notifier) when the query needs them.
 
 ## CATALOG (spec.json)
 {catalog_brief}

@@ -9,6 +9,7 @@ export function HumanNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
       active={data.isActive}
       dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
+      componentKind={data.componentKind ?? "function"}
     >
       <Handle type="target" position={Position.Left} className="!bg-orange-400 !w-2 !h-2" />
       <Handle type="source" position={Position.Top} id="retry" className="!bg-orange-300 !w-2 !h-2 !left-1/2" />

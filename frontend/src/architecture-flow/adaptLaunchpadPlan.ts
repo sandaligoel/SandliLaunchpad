@@ -99,7 +99,8 @@ export function adaptGuruPlanToFlowPlan(
           : undefined) ??
         decision?.rationale,
       layer: (orderRank.get(node.id) ?? idx) + 1,
-      catalog_agent_id: agent?.type ?? node.agent_id ?? undefined,
+      catalog_agent_id:
+        agent?.type ?? node.agent_id ?? decision?.agent_id ?? undefined,
       reuse_decision: decision?.decision,
       metadata: {
         pipeline_order: String((orderRank.get(node.id) ?? idx) + 1),

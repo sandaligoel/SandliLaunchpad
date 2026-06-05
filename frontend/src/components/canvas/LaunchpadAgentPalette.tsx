@@ -69,21 +69,22 @@ export function LaunchpadAgentPalette({
     <aside className="launchpad-builder-sidebar w-64 shrink-0 border-r border-border bg-surface flex flex-col">
       <div className="px-4 py-3 border-b border-border">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Boxes size={14} /> Launchpad agents
+          <Boxes size={14} /> Workflow steps
         </h2>
         <p className="text-[10.5px] text-muted-foreground mt-1">
-          From your chat architecture
+          {plan.graph.nodes.length} steps · {reuse.length} catalog · {build.length}{" "}
+          build new
         </p>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <section>
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[color:var(--color-success)] mb-2 flex items-center gap-1">
-            <RefreshCw size={12} /> Reuse from catalog ({reuse.length})
+            <RefreshCw size={12} /> Catalog agents ({reuse.length})
           </h3>
           <div className="space-y-1.5">
             {reuse.length === 0 ? (
               <p className="text-[11px] text-muted-foreground px-1">
-                No catalog reuse in this plan yet.
+                No catalog agents in this plan yet.
               </p>
             ) : (
               reuse.map((d) => (
@@ -99,7 +100,7 @@ export function LaunchpadAgentPalette({
           <div className="space-y-1.5">
             {build.length === 0 ? (
               <p className="text-[11px] text-muted-foreground px-1">
-                All steps map to existing catalog agents.
+                All steps use catalog agents — nothing to build new.
               </p>
             ) : (
               build.map((d) => (

@@ -9,6 +9,7 @@ import type {
 } from "@/architecture-flow/types/plan";
 import { mockRuntimeForNode } from "@/architecture-flow/lib/mockRuntime";
 import { getNodeReuseDecision } from "@/architecture-flow/lib/planReuse";
+import { resolveStepComponentKind } from "@/utils/stepComponentKind";
 
 export interface ParallelHint {
   forkAfterId: string | null;
@@ -184,8 +185,19 @@ function ensurePipelineConnectivity(
   plan: ArchitecturePlan,
   canvasNodeIds: Set<string>,
   edges: Edge<FlowEdgeData>[],
-  bridge: (from: string, to: string, label: string) => void
+  bridge: (from: string, to: string, label: string) => void,
+  parallel: ParallelHint | null = null,
 ): void {
+  const branchSet = new Set(parallel?.branchIds ?? []);
+  const forkId = parallel?.forkAfterId ?? null;
+
+  const shouldSkipBridge = (from: string, to: string): boolean => {
+    // Never chain parallel branch siblings into a false sequential path.
+    if (branchSet.has(from) && branchSet.has(to)) return true;
+    if (forkId && from === forkId && branchSet.has(to)) return true;
+    return false;
+  };
+
   const seq = orderedPipelineSteps(plan)
     .map((n) => n.id)
     .filter((id) => canvasNodeIds.has(id));
@@ -193,7 +205,7 @@ function ensurePipelineConnectivity(
   for (let i = 0; i < seq.length - 1; i++) {
     const from = seq[i];
     const to = seq[i + 1];
-    if (from === to) continue;
+    if (from === to || shouldSkipBridge(from, to)) continue;
     if (!edgeExists(edges, from, to) && !hasPath(edges, from, to)) {
       bridge(from, to, "flow");
     }
@@ -203,9 +215,15 @@ function ensurePipelineConnectivity(
     if (id.startsWith("__")) continue;
     const degree = edges.filter((e) => e.source === id || e.target === id).length;
     if (degree > 0) continue;
+    if (branchSet.has(id) && forkId) {
+      bridge(forkId, id, "flow");
+      continue;
+    }
     const idx = seq.indexOf(id);
-    if (idx > 0) bridge(seq[idx - 1], id, "flow");
-    else if (idx >= 0 && seq.length > 1) bridge(id, seq[1], "flow");
+    if (idx > 0) {
+      const from = seq[idx - 1];
+      if (!shouldSkipBridge(from, id)) bridge(from, id, "flow");
+    } else if (idx >= 0 && seq.length > 1) bridge(id, seq[1], "flow");
   }
 }
 
@@ -291,6 +309,12 @@ function toFlowNode(
   lane: FlowLane,
   extra: Partial<FlowNodeData> = {}
 ): Node<FlowNodeData> {
+  const reuse = getNodeReuseDecision(plan, node);
+  const componentKind = resolveStepComponentKind(node, reuse);
+  const catalogAgentName =
+    node.catalog_agent_id ||
+    (typeof node.metadata?.catalog_agent === "string" ? node.metadata.catalog_agent : undefined);
+
   return {
     id: node.id,
     type: kind,
@@ -300,7 +324,9 @@ function toFlowNode(
       label: node.label,
       description: node.description,
       lane,
-      reuse: getNodeReuseDecision(plan, node),
+      reuse,
+      componentKind,
+      catalogAgentName,
       runtime: mockRuntimeForNode(node, plan),
       pipelineOrder: Number(node.metadata?.pipeline_order || node.layer || 0),
       capabilityId: node.metadata?.capability,
@@ -355,9 +381,11 @@ export function buildGraphStructure(
     }
   }
 
-  const entry = pipelineOrder.filter((n) => n.type === "data_store" || n.type === "api");
+  const entry = pipelineOrder.filter(
+    (n) => n.type === "data_store" || n.type === "api" || isIntakeLike(n),
+  );
+  const entryIds = new Set(entry.map((n) => n.id));
   const orch = pipelineOrder.find((n) => n.type === "orchestrator");
-  const human = pipelineOrder.find((n) => n.type === "human");
 
   const pushNode = (
     node: GraphNode,
@@ -377,20 +405,24 @@ export function buildGraphStructure(
   for (const n of entry) pushNode(n, "input", "input");
   if (orch) pushNode(orch, "orchestrator", "orchestration");
 
-  for (const a of agents) {
-    let kind = agentKind(a.reuse_decision);
-    let lane = classifyAgentLane(a.label, a.description || "", a.type);
-    if (isMergeNode(a)) {
-      kind = isDecisionNode(a) ? "decision" : "merge";
+  for (const n of pipelineOrder) {
+    if (n.type === "human") {
+      pushNode(n, "human", "hitl");
+      continue;
+    }
+    if (!isStepNode(n) || entryIds.has(n.id)) continue;
+
+    let kind = agentKind(n.reuse_decision);
+    let lane = classifyAgentLane(n.label, n.description || "", n.type);
+    if (isMergeNode(n)) {
+      kind = isDecisionNode(n) ? "decision" : "merge";
       lane = "merge";
     }
-    const branchIdx = parallel?.branchIds.indexOf(a.id) ?? -1;
-    pushNode(a, kind, lane, {
+    const branchIdx = parallel?.branchIds.indexOf(n.id) ?? -1;
+    pushNode(n, kind, lane, {
       branchLabel: branchIdx >= 0 ? `Branch ${branchIdx + 1}` : undefined,
     });
   }
-
-  if (human) pushNode(human, "human", "hitl");
 
   const addEdge = (
     source: string,
@@ -447,9 +479,15 @@ export function buildGraphStructure(
   const canvasNodeIds = new Set(
     nodes.filter((n) => !n.id.startsWith("__")).map((n) => n.id)
   );
-  ensurePipelineConnectivity(plan, canvasNodeIds, edges, (from, to, label) => {
-    addEdge(from, to, "sequential", label);
-  });
+  ensurePipelineConnectivity(
+    plan,
+    canvasNodeIds,
+    edges,
+    (from, to, label) => {
+      addEdge(from, to, "sequential", label);
+    },
+    parallel,
+  );
 
   return { nodes, edges, parallel };
 }

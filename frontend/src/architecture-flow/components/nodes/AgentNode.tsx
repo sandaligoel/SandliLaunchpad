@@ -18,6 +18,7 @@ export function AgentNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
       active={data.isActive}
       dimmed={data.isDimmed}
       highlighted={data.isHighlighted || selected}
+      componentKind={data.componentKind ?? "agent"}
     >
       <Handle type="target" position={Position.Left} className="!w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!w-2 !h-2" />
@@ -36,11 +37,11 @@ export function AgentNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
             <StatusDot status={data.runtime.status} />
           </div>
         </div>
-        {data.runtime.catalog && (
-          <p className="mt-1 text-[10px] text-slate-400 truncate max-w-[200px]">
-            📦 {data.runtime.catalog}
+        {(data.catalogAgentName || data.runtime.catalog) && data.componentKind === "agent" ? (
+          <p className="mt-1 text-[10px] font-medium text-emerald-300/90 truncate max-w-[220px]">
+            📦 {data.catalogAgentName || data.runtime.catalog}
           </p>
-        )}
+        ) : null}
         <MetricChips runtime={data.runtime} />
         <AnimatePresence>
           {data.expanded && (

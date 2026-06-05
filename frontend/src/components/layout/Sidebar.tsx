@@ -6,13 +6,17 @@ import {
   Boxes,
   Sparkles,
   MessageSquare,
-  Video,
 } from "lucide-react";
 import { Logo } from "./Logo";
+import { StorageStatusRefreshHint } from "./StorageStatusBanner";
+
+const APP_BUILD =
+  typeof import.meta.env.VITE_APP_BUILD === "string"
+    ? import.meta.env.VITE_APP_BUILD
+    : "dev";
 
 const NAV = [
   { to: "/interview", label: "Agent Launchpad", icon: MessageSquare },
-  { to: "/image-video", label: "Image to Video", icon: Video },
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/builder", label: "Workflow Builder", icon: Sparkles },
   { to: "/workflows", label: "Workflows", icon: Workflow },
@@ -47,8 +51,12 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="px-4 py-3 border-t border-border text-[11px] text-muted-foreground">
-        Affine Analytics — AgentForge v1.0
+      <div className="px-4 py-3 border-t border-border text-[11px] text-muted-foreground space-y-1">
+        <div>Affine Analytics — AgentForge v1.0</div>
+        <div className="flex items-center justify-between gap-2">
+          <span title="UI bundle id — changes when code updates">UI {APP_BUILD}</span>
+          <StorageStatusRefreshHint />
+        </div>
       </div>
     </aside>
   );

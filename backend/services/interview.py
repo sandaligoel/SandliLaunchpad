@@ -23,6 +23,8 @@ from schemas.architecture_spec import (
     ChatMessage,
     FieldStatus,
     GraphDraft,
+    GraphEdge,
+    GraphNode,
     ClarifyingQuestionItem,
     InterviewQuestion,
     InterviewSession,
@@ -1127,6 +1129,90 @@ def next_question(
     return _build_catalog_backed_question(spec, field_key, settings, msgs)
 
 
+def _agents_for_graph_draft(session: InterviewSession) -> list:
+    """Merge workflow matches with catalog hints for a richer agent chain."""
+    from schemas.agent_workflow import MatchedAgentSummary
+
+    state = session.agent_workflow
+    if not state:
+        return []
+
+    agents = list(state.matched_agents)
+    seen = {a.agent_id for a in agents if a.agent_id}
+    for hint in session.spec.catalog_hints or []:
+        aid = str(hint.agent_id or "").strip()
+        if not aid or aid in seen:
+            continue
+        agents.append(
+            MatchedAgentSummary(
+                agent_id=aid,
+                name=hint.name or aid,
+                reason=(hint.function_summary or "")[:140],
+            )
+        )
+        seen.add(aid)
+        if len(agents) >= 6:
+            break
+    return agents
+
+
+def _graph_draft_from_workflow(session: InterviewSession) -> GraphDraft | None:
+    """Fast sequential graph from agent-workflow matches (no LLM)."""
+    chain = _agents_for_graph_draft(session)
+    if not chain:
+        return None
+
+    from services.graph_sanitizer import normalize_node_id, sanitize_graph
+
+    nodes: list[GraphNode] = [
+        GraphNode(id="intake", label="Request intake", type="gateway"),
+    ]
+    edges: list[GraphEdge] = []
+    prev = "intake"
+
+    for i, agent in enumerate(chain):
+        nid = normalize_node_id(f"agent-{agent.agent_id or i}")
+        nodes.append(
+            GraphNode(
+                id=nid,
+                label=agent.name,
+                type="agent",
+                agent_id=agent.agent_id or None,
+                description=(agent.reason or "")[:200] or None,
+            )
+        )
+        edges.append(GraphEdge(from_id=prev, to_id=nid))
+        prev = nid
+
+    nodes.append(GraphNode(id="delivery", label="Deliver result", type="gateway"))
+    edges.append(GraphEdge(from_id=prev, to_id="delivery"))
+    return sanitize_graph(GraphDraft(nodes=nodes, edges=edges))
+
+
+def _blueprint_markdown_from_session(
+    session: InterviewSession,
+    settings: Settings,
+) -> str:
+    """Deterministic blueprint text for Phase 3 (no LLM)."""
+    parts: list[str] = []
+    ps = session.spec.problem_statement.strip()
+    if ps:
+        parts.append(f"## Problem\n{ps}")
+    ts = (session.spec.transcript_summary or "").strip()
+    if ts:
+        parts.append(f"## Summary\n{ts}")
+    known = session.spec.compact_known_json()
+    if known:
+        parts.append(
+            f"## Requirements\n```json\n{json.dumps(known, indent=2)}\n```"
+        )
+    if session.agent_workflow:
+        from services.agent_workflow_interview import format_workflow_configured
+
+        parts.append(format_workflow_configured(session.agent_workflow, settings))
+    return "\n\n".join(parts) or ps or "Architecture ready for planning."
+
+
 def synthesize_architecture_blueprint(
     spec: ArchitectureSpec,
     messages: list[ChatMessage],
@@ -1181,19 +1267,47 @@ def _finalize_session(
     settings: Settings,
     client: AzureOpenAI,
 ) -> InterviewSession:
+    """
+    Mark session ready and produce architecture artifacts.
+
+    Fast path: deterministic blueprint + graph draft, then a single
+    ``plan_architecture`` call cached on the session so the builder loads
+    immediately. Skips the extra synthesis LLM that previously ran here.
+    """
     session.spec.status = "ready"
     session.pending_question = None
-    markdown, graph = synthesize_architecture_blueprint(
-        session.spec, session.messages, settings, client=client
+
+    session.spec.architecture_blueprint = _blueprint_markdown_from_session(
+        session, settings
     )
-    session.spec.architecture_blueprint = markdown
-    session.spec.graph_draft = graph
+    workflow_graph = _graph_draft_from_workflow(session)
+    if workflow_graph:
+        session.spec.graph_draft = workflow_graph
+
+    if session.architecture_plan is None:
+        try:
+            from services.architecture_planner import plan_architecture
+
+            session.architecture_plan = plan_architecture(
+                session, settings, client=client
+            )
+            logger.info(
+                "Pre-generated architecture plan at finalize for session %s",
+                session.id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Pre-plan at finalize failed for session %s (builder will retry): %s",
+                session.id,
+                exc,
+            )
+
     session.messages.append(
         ChatMessage(
             role="assistant",
             content=(
                 "Requirements and architectural flow are confirmed. "
-                "See the Architecture blueprint and graph draft in the panel — ready for Phase 3."
+                "Opening the workflow builder with your architecture plan."
             ),
         )
     )
@@ -1360,7 +1474,7 @@ def run_interview_turn(
             f"{session.spec.problem_statement}\n\n{session.spec.transcript_summary}"
         )
         session.spec.catalog_hints = build_catalog_hints_for_interview(
-            refresh_query, settings, top_k=8
+            refresh_query, settings, top_k=12
         )
 
     if session.spec.status == "ready":
@@ -1409,7 +1523,7 @@ def _start_clarifying_phase(
     """Load spec.json hints and ask catalog-grounded clarifying questions first."""
     statement = session.spec.problem_statement
     session.spec.catalog_hints = build_catalog_hints_for_interview(
-        statement, settings, top_k=8
+        statement, settings, top_k=12
     )
     catalog_block = format_catalog_brief_for_interview(
         statement,
@@ -1441,9 +1555,9 @@ def _start_clarifying_phase(
     )
     session.pending_question = question
     intro = (
-        "I'll ask a few scoping questions to align your requirements with the "
-        "right agents and architecture pattern. Select the closest option or "
-        "provide a precise answer in chat. "
+        "I’ll ask several technical scoping questions to align your requirements "
+        "with the right agents and architecture pattern. Select the closest option "
+        "or provide a precise answer in chat. "
     )
     session.messages.append(
         ChatMessage(

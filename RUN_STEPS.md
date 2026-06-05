@@ -122,8 +122,10 @@ cd frontend && npm run dev
 | Problem | Fix |
 |---------|-----|
 | `bash` / WSL error on `npm run dev` | Use `npx vite dev` and create `.env.local` manually (see above) |
-| “Cannot reach AFFINE API” in UI | Start backend; confirm http://127.0.0.1:8003/health works |
+| “Cannot reach AFFINE API” / **Failed to fetch** on Workflows | Start backend: `./scripts/start-backend.sh`. Confirm http://127.0.0.1:8004/health returns `ok` (port from `runtime-ports.json`) |
 | Wrong proxy port | Ensure `config/runtime-ports.json` matches backend port; restart Vite |
+| Builder UI looks outdated (old labels, old counts) | Two Vite servers may be running. Stop all: `lsof -i :5173 -i :5174`, kill those PIDs, then one `cd frontend && npm run dev`. Open the URL Vite prints and hard-refresh (`Cmd+Shift+R`). Check sidebar footer **UI** timestamp — it should match when you restarted Vite |
+| Old UI when Blob / API is down | Browser may show a cached bundle while offline. Fix storage or start backend first, then hard-refresh. A red/amber banner at the top explains API vs Blob status on every page |
 | Missing `.env` | `copy backend\.env.example backend\.env` and add credentials |
 
-More detail: [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md)
+More detail: [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md)x

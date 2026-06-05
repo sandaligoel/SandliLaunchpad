@@ -1,5 +1,46 @@
 import { motion } from "framer-motion";
 import type { FlowNodeData, ReuseDecision } from "@/architecture-flow/types/plan";
+import {
+  stepComponentKindLabel,
+  type StepComponentKind,
+} from "@/utils/stepComponentKind";
+
+const FLOW_KIND_ACCENT: Record<StepComponentKind, string> = {
+  agent: "border-l-emerald-400 shadow-[inset_4px_0_12px_rgba(16,185,129,0.25)]",
+  tool: "border-l-sky-400 shadow-[inset_4px_0_12px_rgba(56,189,248,0.25)]",
+  function: "border-l-violet-400 shadow-[inset_4px_0_12px_rgba(167,139,250,0.25)]",
+};
+
+export function FlowComponentKindRibbon({ kind }: { kind: StepComponentKind }) {
+  const cls =
+    kind === "agent"
+      ? "flow-kind-ribbon flow-kind-ribbon--agent"
+      : kind === "tool"
+        ? "flow-kind-ribbon flow-kind-ribbon--tool"
+        : "flow-kind-ribbon flow-kind-ribbon--function";
+  return (
+    <div className={cls} title={`${stepComponentKindLabel(kind)} step`}>
+      <span className="flow-kind-ribbon__label">{stepComponentKindLabel(kind)}</span>
+    </div>
+  );
+}
+
+export function ComponentKindLegend() {
+  const items: StepComponentKind[] = ["agent", "tool", "function"];
+  return (
+    <div className="flow-kind-legend" aria-label="Step component types">
+      <span className="flow-kind-legend__title">Step type</span>
+      {items.map((k) => (
+        <span
+          key={k}
+          className={`flow-kind-legend__item flow-kind-legend__item--${k}`}
+        >
+          {stepComponentKindLabel(k)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function StatusDot({ status }: { status: FlowNodeData["runtime"]["status"] }) {
   const colors: Record<string, string> = {
@@ -82,16 +123,19 @@ export function NodeShell({
   active,
   dimmed,
   highlighted,
+  componentKind,
 }: {
   children: React.ReactNode;
   className?: string;
   active?: boolean;
   dimmed?: boolean;
   highlighted?: boolean;
+  componentKind?: StepComponentKind;
 }) {
+  const kindAccent = componentKind ? `border-l-[5px] ${FLOW_KIND_ACCENT[componentKind]}` : "";
   return (
     <div
-      className={`relative w-full max-w-[320px] rounded-xl border backdrop-blur-md transition-all duration-300 ${className} ${
+      className={`relative w-full max-w-[320px] overflow-hidden rounded-xl border backdrop-blur-md transition-all duration-300 ${kindAccent} ${className} ${
         active
           ? "scale-[1.02] shadow-[0_0_28px_rgba(59,130,246,0.45)] border-blue-400 z-10"
           : dimmed
@@ -101,6 +145,7 @@ export function NodeShell({
               : ""
       }`}
     >
+      {componentKind ? <FlowComponentKindRibbon kind={componentKind} /> : null}
       <PulseRing active={active} />
       {active && <RunningBanner />}
       {children}

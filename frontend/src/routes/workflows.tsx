@@ -46,8 +46,12 @@ function Workflows() {
       .catch((e) => {
         if (!cancelled) {
           setLaunchpadRows([]);
+          const raw =
+            e instanceof Error ? e.message : "Could not load workflows";
           setLoadError(
-            e instanceof Error ? e.message : "Could not load workflows",
+            /failed to fetch/i.test(raw)
+              ? "Cannot reach the AFFINE API. Start the backend: ./scripts/start-backend.sh (see RUN_STEPS.md)."
+              : raw,
           );
         }
       })

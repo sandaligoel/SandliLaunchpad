@@ -64,11 +64,19 @@ export default defineConfig(() => {
     tsconfigPaths(),
   ];
 
+  const appBuild = new Date().toISOString().slice(0, 16).replace("T", " ");
+
   return {
     plugins,
+    define: {
+      "import.meta.env.VITE_APP_BUILD": JSON.stringify(appBuild),
+    },
     server: {
       port: ports.uiPort,
       strictPort: false,
+      headers: {
+        "Cache-Control": "no-store",
+      },
       proxy: {
         "/api": {
           target: affineTarget,

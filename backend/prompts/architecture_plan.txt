@@ -7,10 +7,12 @@ You will receive:
 
 Your job:
 - Output a connected graph from user trigger to outcome, including human-in-the-loop gates from hitl_behavior.
-- For each processing step, decide reuse (catalog agent fits), adapt (close match, minor gap), or build (custom node).
-- Set type "agent" and agent_id ONLY when decision is reuse or adapt AND agent_id exists in catalog matches.
-- Set type "human" for analyst approval/review steps; type "gateway" for routing/validation gates; type "custom" for new components.
-- Prefer reusing catalog agents when function_summary and I/O align with the spec — do not invent agent_ids.
+- **Catalog-first:** Affine's value is reusing proven agents. Aim for **at least 60% of processing steps** as reuse or adapt. Use build only when no catalog match can cover the capability.
+- Include **3–6 distinct catalog agents** in the graph when matches are provided — chain them for ingestion, extraction, validation, orchestration, and delivery as the problem requires.
+- For each processing step, decide reuse (catalog agent fits), adapt (close match, minor gap), or build (custom node). **Default to adapt** when a catalog agent covers ≥50% of the step intent; prefer reuse when score ≥0.35 or function_summary clearly aligns.
+- Set type "agent" and agent_id when decision is reuse or adapt AND agent_id exists in catalog matches. Map each catalog match to at least one graph node when relevant.
+- Set type "human" for analyst approval/review steps; type "gateway" for routing/validation gates; type "custom" only when no catalog agent applies.
+- Do not invent agent_ids — every agent_id must appear in CATALOG MATCHES.
 
 Output ONLY valid JSON:
 

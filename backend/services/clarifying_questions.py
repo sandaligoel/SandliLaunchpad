@@ -34,7 +34,7 @@ def generate_clarifying_questions(
     catalog_context: str = "",
 ) -> list[ClarifyingQuestionItem]:
     """
-    Ask the LLM for 3–5 architecture-shaping clarifying questions.
+    Ask the LLM for 5–8 architecture-shaping clarifying questions.
 
     Raises:
         ValueError: On empty query or invalid LLM output.
@@ -53,7 +53,7 @@ def generate_clarifying_questions(
         .replace("{catalog_context}", catalog)
     )
     user = (
-        "Return the JSON object with 3–5 clarifying questions. "
+        "Return the JSON object with 5–8 clarifying questions. "
         "Use professional technical language for experienced practitioners. "
         "Each question must tie to spec.json agent capabilities."
     )
@@ -81,9 +81,9 @@ def generate_clarifying_questions(
             questions.append(
                 ClarifyingQuestionItem(id=qid, question=qtext, why_it_matters=why)
             )
-        if len(questions) < 3 or len(questions) > 5:
+        if len(questions) < 5 or len(questions) > 8:
             raise ValueError(
-                f"Expected 3–5 clarifying questions, got {len(questions)}"
+                f"Expected 5–8 clarifying questions, got {len(questions)}"
             )
         return questions
     except (json.JSONDecodeError, ValidationError) as exc:

@@ -197,7 +197,7 @@ export function LaunchpadBuilder({ sessionId }: { sessionId: string }) {
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8">
         <Loader2 className="animate-spin text-primary" size={28} />
         <p className="text-sm text-muted-foreground">
-          Building your architecture from the chat… (30–60s)
+          Loading your workflow architecture…
         </p>
       </div>
     );
@@ -236,9 +236,9 @@ export function LaunchpadBuilder({ sessionId }: { sessionId: string }) {
                   (d) => d.decision === "reuse" || d.decision === "adapt",
                 ).length
               }{" "}
-              reuse ·{" "}
+              catalog ·{" "}
               {plan.reuse_decisions.filter((d) => d.decision === "build").length}{" "}
-              build
+              build new
             </span>
             <span className="inline-flex items-center gap-1 text-primary">
               <Pencil size={11} />
