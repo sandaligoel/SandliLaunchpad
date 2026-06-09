@@ -1,46 +1,13 @@
 import { motion } from "framer-motion";
-import type { FlowNodeData, ReuseDecision } from "@/architecture-flow/types/plan";
-import {
-  stepComponentKindLabel,
-  type StepComponentKind,
-} from "@/utils/stepComponentKind";
+import { Bot, Braces, Wrench } from "lucide-react";
+import type { FlowNodeData, ImplementationKind, ReuseDecision } from "@/architecture-flow/types/plan";
+import { KIND_META, kindBadgeStyle, type KindTone } from "@/utils/agentKind";
 
-const FLOW_KIND_ACCENT: Record<StepComponentKind, string> = {
-  agent: "border-l-emerald-400 shadow-[inset_4px_0_12px_rgba(16,185,129,0.25)]",
-  tool: "border-l-sky-400 shadow-[inset_4px_0_12px_rgba(56,189,248,0.25)]",
-  function: "border-l-violet-400 shadow-[inset_4px_0_12px_rgba(167,139,250,0.25)]",
-};
-
-export function FlowComponentKindRibbon({ kind }: { kind: StepComponentKind }) {
-  const cls =
-    kind === "agent"
-      ? "flow-kind-ribbon flow-kind-ribbon--agent"
-      : kind === "tool"
-        ? "flow-kind-ribbon flow-kind-ribbon--tool"
-        : "flow-kind-ribbon flow-kind-ribbon--function";
-  return (
-    <div className={cls} title={`${stepComponentKindLabel(kind)} step`}>
-      <span className="flow-kind-ribbon__label">{stepComponentKindLabel(kind)}</span>
-    </div>
-  );
-}
-
-export function ComponentKindLegend() {
-  const items: StepComponentKind[] = ["agent", "tool", "function"];
-  return (
-    <div className="flow-kind-legend" aria-label="Step component types">
-      <span className="flow-kind-legend__title">Step type</span>
-      {items.map((k) => (
-        <span
-          key={k}
-          className={`flow-kind-legend__item flow-kind-legend__item--${k}`}
-        >
-          {stepComponentKindLabel(k)}
-        </span>
-      ))}
-    </div>
-  );
-}
+const KIND_ICONS = {
+  agent: Bot,
+  function: Braces,
+  tool: Wrench,
+} as const;
 
 export function StatusDot({ status }: { status: FlowNodeData["runtime"]["status"] }) {
   const colors: Record<string, string> = {
@@ -57,6 +24,106 @@ export function StatusDot({ status }: { status: FlowNodeData["runtime"]["status"
         ? "ring-2 ring-emerald-400/40"
         : "";
   return <span className={`h-2.5 w-2.5 rounded-full ${colors[status]} ${ring}`} />;
+}
+
+export function ImplementationKindBadge({
+  kind,
+  size = "md",
+  tone = "canvas",
+}: {
+  kind?: ImplementationKind;
+  size?: "sm" | "md" | "lg";
+  tone?: KindTone;
+}) {
+  if (!kind) return null;
+  const meta = KIND_META[kind];
+  const Icon = KIND_ICONS[kind];
+  const sizeClass =
+    size === "lg"
+      ? "px-3 py-1 text-[11px] gap-2 rounded-lg"
+      : size === "sm"
+        ? "px-1.5 py-0.5 text-[9px] gap-1 rounded"
+        : "px-2.5 py-1 text-[10px] gap-1.5 rounded-md";
+  const iconSize = size === "lg" ? 14 : size === "sm" ? 10 : 12;
+  const styles = kindBadgeStyle(kind, tone);
+  const glow =
+    tone === "canvas" && size !== "sm" ? styles.boxShadow : undefined;
+  return (
+    <span
+      className={`inline-flex items-center font-extrabold uppercase tracking-widest border ${size === "lg" ? "border-2" : ""} ${sizeClass}`}
+      style={{
+        color: styles.color,
+        background: styles.background,
+        borderColor: styles.borderColor,
+        boxShadow: glow,
+      }}
+      title={`${meta.label} — multi-agent chain, LLM function, or infrastructure tool`}
+    >
+      <Icon size={iconSize} strokeWidth={2.5} aria-hidden />
+      {meta.shortLabel}
+    </span>
+  );
+}
+
+export function ImplementationKindStripe({ kind }: { kind?: ImplementationKind }) {
+  if (!kind) return null;
+  const meta = KIND_META[kind];
+  return (
+    <div
+      className="absolute inset-x-0 top-0 h-2.5 rounded-t-xl z-[1]"
+      style={{
+        background: `linear-gradient(90deg, ${meta.stripe}, ${meta.solid})`,
+        boxShadow: `0 0 16px ${meta.glow}`,
+      }}
+      aria-hidden
+    />
+  );
+}
+
+export function ImplementationKindAccent({ kind }: { kind?: ImplementationKind }) {
+  if (!kind) return null;
+  const meta = KIND_META[kind];
+  return (
+    <div
+      className="absolute left-0 top-0 bottom-0 w-[5px] rounded-l-xl z-[1]"
+      style={{
+        background: `linear-gradient(180deg, ${meta.stripe}, ${meta.solid})`,
+        boxShadow: `0 0 18px ${meta.glow}`,
+      }}
+      aria-hidden
+    />
+  );
+}
+
+/** Shared type chrome for input, human, merge, and agent nodes. */
+export function KindNodeChrome({
+  kind,
+  children,
+  roleLabel,
+}: {
+  kind?: ImplementationKind;
+  children: React.ReactNode;
+  roleLabel?: React.ReactNode;
+}) {
+  const meta = kind ? KIND_META[kind] : null;
+  return (
+    <div
+      className="relative overflow-hidden rounded-xl"
+      style={meta ? { background: meta.nodeBg } : undefined}
+    >
+      {kind ? <ImplementationKindStripe kind={kind} /> : null}
+      {kind ? <ImplementationKindAccent kind={kind} /> : null}
+      <div className="relative px-3.5 pb-3.5 pl-5 pt-4">
+        {kind || roleLabel ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {kind ? <ImplementationKindBadge kind={kind} size="lg" /> : null}
+            {roleLabel}
+          </div>
+        ) : null}
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function ReuseBadge({ reuse }: { reuse?: ReuseDecision }) {
@@ -123,29 +190,41 @@ export function NodeShell({
   active,
   dimmed,
   highlighted,
-  componentKind,
+  kindBorder,
+  kindGlow,
 }: {
   children: React.ReactNode;
   className?: string;
   active?: boolean;
   dimmed?: boolean;
   highlighted?: boolean;
-  componentKind?: StepComponentKind;
+  kindBorder?: string;
+  kindGlow?: string;
 }) {
-  const kindAccent = componentKind ? `border-l-[5px] ${FLOW_KIND_ACCENT[componentKind]}` : "";
+  const kindStyle =
+    kindBorder && !active && !dimmed
+      ? {
+          borderColor: kindBorder,
+          borderWidth: 2,
+          boxShadow: `0 0 0 1px ${kindBorder}, 0 0 24px ${kindGlow ?? kindBorder}`,
+        }
+      : undefined;
+
   return (
     <div
-      className={`relative w-full max-w-[320px] overflow-hidden rounded-xl border backdrop-blur-md transition-all duration-300 ${kindAccent} ${className} ${
+      className={`relative w-full max-w-[320px] rounded-xl border backdrop-blur-md transition-all duration-300 ${className} ${
         active
           ? "scale-[1.02] shadow-[0_0_28px_rgba(59,130,246,0.45)] border-blue-400 z-10"
           : dimmed
             ? "opacity-30 saturate-50 border-slate-700/50"
             : highlighted
               ? "shadow-glow-green border-emerald-400/50"
-              : ""
+              : kindBorder
+                ? ""
+                : "border-slate-600/60"
       }`}
+      style={kindStyle}
     >
-      {componentKind ? <FlowComponentKindRibbon kind={componentKind} /> : null}
       <PulseRing active={active} />
       {active && <RunningBanner />}
       {children}

@@ -45,3 +45,33 @@ def test_breaks_backward_edge():
 
 def test_normalize_node_id():
     assert normalize_node_id("Foo Bar!") == "foo-bar"
+
+
+def test_adds_end_node_for_parallel_branches():
+    """Quin + Eryl branches without merge get workflow-end."""
+    graph = GraphDraft(
+        nodes=[
+            GraphNode(id="copilot-gateway", label="Copilot Gateway", type="gateway"),
+            GraphNode(
+                id="pipeline-intent-classifier",
+                label="Pipeline Intent Classifier",
+                type="agent",
+            ),
+            GraphNode(id="quin-sql-agent-chain", label="Quin SQL", type="agent"),
+            GraphNode(id="eryl-semantic-rag-agent-chain", label="Eryl RAG", type="agent"),
+        ],
+        edges=[
+            GraphEdge(from_id="copilot-gateway", to_id="pipeline-intent-classifier"),
+            GraphEdge(from_id="pipeline-intent-classifier", to_id="quin-sql-agent-chain"),
+            GraphEdge(
+                from_id="pipeline-intent-classifier",
+                to_id="eryl-semantic-rag-agent-chain",
+            ),
+        ],
+    )
+    clean = sanitize_graph(graph)
+    end_nodes = [n for n in clean.nodes if n.label == "End" or n.id == "workflow-end"]
+    assert len(end_nodes) == 1
+    end_id = end_nodes[0].id
+    targets = {e.to_id for e in clean.edges if e.from_id in ("quin-sql-agent-chain", "eryl-semantic-rag-agent-chain")}
+    assert end_id in targets

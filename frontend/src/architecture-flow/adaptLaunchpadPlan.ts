@@ -4,6 +4,7 @@ import {
   catalogInputs,
   catalogOutputs,
   findAgentDef,
+  findAgentDefByLabel,
   resolveCatalogAgentForNode,
 } from "@/utils/stepIo";
 import type {
@@ -14,6 +15,7 @@ import type {
   PlanReuseDecision,
 } from "@/architecture-flow/types/plan";
 import { computeFlowOrder } from "@/utils/flowOrder";
+import { classifyAgentDef, inferNodeImplementationKind } from "@/utils/agentKind";
 
 function mapNodeType(type: GuruNode["type"]): GraphNodeType {
   if (type === "gateway") return "api";
@@ -79,13 +81,25 @@ export function adaptGuruPlanToFlowPlan(
 
   const nodes: GraphNode[] = guru.graph.nodes.map((node, idx) => {
     const decision = guru.reuse_decisions.find((d) => d.node_id === node.id);
+    const mappedType = mapNodeType(node.type);
     const agent =
       findAgentDef(
         catalogAgents,
         node.agent_id ?? decision?.agent_id ?? null,
         decision?.agent_name ?? node.label,
-      ) ?? resolveCatalogAgentForNode(guru, node.id, catalogAgents);
+      ) ??
+      resolveCatalogAgentForNode(guru, node.id, catalogAgents) ??
+      findAgentDefByLabel(catalogAgents, node.label);
     const { inputs, outputs } = catalogIoForGuruNode(guru, node, catalogAgents);
+    const implementationKind =
+      (agent
+        ? agent.implementationKind ?? classifyAgentDef(agent)
+        : inferNodeImplementationKind(
+            node.label,
+            node.description ?? decision?.rationale,
+            mappedType,
+          )) ?? undefined;
+    const catalogNotes = agent?.fields?.find((f) => f.key === "notes")?.description;
 
     return {
       id: node.id,
@@ -106,6 +120,8 @@ export function adaptGuruPlanToFlowPlan(
         pipeline_order: String((orderRank.get(node.id) ?? idx) + 1),
         catalog_inputs: JSON.stringify(inputs),
         catalog_outputs: JSON.stringify(outputs),
+        ...(implementationKind ? { implementation_kind: implementationKind } : {}),
+        ...(catalogNotes?.trim() ? { catalog_notes: catalogNotes.trim() } : {}),
         ...(node.input_json != null
           ? { input_json: JSON.stringify(node.input_json) }
           : {}),

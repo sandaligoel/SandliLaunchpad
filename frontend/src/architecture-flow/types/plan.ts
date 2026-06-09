@@ -114,10 +114,13 @@ export interface NodeRuntimeMeta {
   project?: string;
 }
 
+export type ImplementationKind = "agent" | "function" | "tool";
+
 export interface FlowNodeData extends Record<string, unknown> {
   kind: FlowNodeKind;
   label: string;
   description?: string;
+  implementationKind?: ImplementationKind;
   lane: FlowLane;
   reuse?: ReuseDecision;
   /** Agent (catalog), Tool (API/data), or Function (orchestration/HITL/custom). */

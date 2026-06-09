@@ -19,7 +19,30 @@ BACKOFF_SECONDS = (2, 4, 8)
 
 def load_prompt(filename: str) -> str:
     """Load a prompt template from the prompts directory."""
-    return (PROMPTS_DIR / filename).read_text(encoding="utf-8")
+    text = (PROMPTS_DIR / filename).read_text(encoding="utf-8")
+    return _expand_prompt_includes(text)
+
+
+def _expand_prompt_includes(text: str, *, _depth: int = 0) -> str:
+    """Inline {{partial.txt}} includes (one level, no recursion into partials)."""
+    if _depth > 2:
+        return text
+    import re
+
+    pattern = re.compile(r"\{\{([a-zA-Z0-9_.-]+\.txt)\}\}")
+
+    def _replace(match: re.Match[str]) -> str:
+        include_name = match.group(1)
+        include_path = PROMPTS_DIR / include_name
+        if not include_path.is_file():
+            logger.warning("Prompt include not found: %s", include_name)
+            return match.group(0)
+        return include_path.read_text(encoding="utf-8").strip()
+
+    expanded = pattern.sub(_replace, text)
+    if pattern.search(expanded):
+        return _expand_prompt_includes(expanded, _depth=_depth + 1)
+    return expanded
 
 
 def strip_json_fences(text: str) -> str:

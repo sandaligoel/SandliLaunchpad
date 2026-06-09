@@ -30,6 +30,8 @@ from services.catalog_interview_context import (
     _load_catalog,
     _load_spec_agents,
     format_catalog_brief_for_interview,
+    is_data_copilot_query,
+    pinned_copilot_agents,
 )
 from services.agent_input_chips import (
     build_agent_input_chips,
@@ -88,8 +90,6 @@ EXPLICIT_FINISH_KEYWORDS = (
     "done",
 )
 MIN_ANSWERS_BEFORE_AUTO_COMPLETE = 6
-TARGET_MATCHED_AGENTS = 6
-DEFAULT_MATCH_AGENT_LIMIT = 6
 
 # Wired automatically from upstream agents — do not ask the business user.
 _SKIP_INPUT_SUBSTRINGS = (
@@ -285,7 +285,9 @@ def _pending_questions(state: AgentWorkflowState) -> list[AgentSetupQuestionItem
             -(q.rank_score + _dependency_rank_boost(q, state)),
             -q.impact_score,
             -q.dependency_score,
+            q.agent_id,
             q.input_name,
+            q.field_key,
         ),
     )
 
@@ -483,22 +485,26 @@ def _detect_vertical(query: str) -> str | None:
     return None
 
 
-def _match_agents(
-    query: str,
-    catalog: CatalogLoadResult,
-    *,
-    limit: int = DEFAULT_MATCH_AGENT_LIMIT,
-) -> list[AgentRecord]:
+def _match_agents(query: str, catalog: CatalogLoadResult, *, limit: int = 3) -> list[AgentRecord]:
+    """Match catalog agents; data copilot queries pin Quin + Eryl + intent classifier."""
+    pinned = pinned_copilot_agents(query, catalog.agents)
+    if pinned:
+        logger.info(
+            "Data copilot query — pinned agents: %s",
+            [a.name for a in pinned],
+        )
+        return pinned[:limit]
+
     vertical = _detect_vertical(query)
     scored: list[tuple[float, AgentRecord]] = []
     for agent in catalog.agents:
         score = _keyword_score(query, agent)
         if vertical and agent.vertical not in (vertical, "Other"):
-            score *= 0.55
-        if score <= 0.03:
+            score *= 0.35
+        if score <= 0.05:
             continue
         scored.append((score, agent))
-    scored.sort(key=lambda x: x[0], reverse=True)
+    scored.sort(key=lambda x: (-x[0], x[1].id))
     seen: set[str] = set()
     out: list[AgentRecord] = []
     for _, agent in scored:
@@ -509,55 +515,6 @@ def _match_agents(
         if len(out) >= limit:
             break
     return out
-
-
-def _enrich_matched_agents(
-    matched: list[MatchedAgentSummary],
-    query: str,
-    catalog: CatalogLoadResult,
-    settings: Settings,
-    *,
-    target: int = TARGET_MATCHED_AGENTS,
-) -> list[MatchedAgentSummary]:
-    """Ensure every problem statement gets a multi-agent catalog chain."""
-    by_id = {a.id: a for a in catalog.agents}
-    seen = {m.agent_id for m in matched if m.agent_id}
-    out = list(matched)
-
-    for agent in _match_agents(query, catalog, limit=target):
-        if agent.id in seen:
-            continue
-        seen.add(agent.id)
-        out.append(
-            MatchedAgentSummary(
-                agent_id=agent.id,
-                name=agent.name,
-                reason=(agent.function_summary or "")[:140],
-            )
-        )
-        if len(out) >= target:
-            return out
-
-    hints = build_catalog_hints_for_interview(
-        query, settings, top_k=target, preferred_agent_ids=list(seen)
-    )
-    for hint in hints:
-        aid = str(hint.agent_id or "").strip()
-        if not aid or aid in seen:
-            continue
-        agent = by_id.get(aid)
-        out.append(
-            MatchedAgentSummary(
-                agent_id=aid,
-                name=hint.name or (agent.name if agent else aid),
-                reason=(hint.function_summary or "")[:140],
-            )
-        )
-        seen.add(aid)
-        if len(out) >= target:
-            break
-
-    return out[:target]
 
 
 def _input_satisfied_by_query(input_name: str, query: str) -> bool:
@@ -860,83 +817,22 @@ def _init_workflow_state(
     settings: Settings,
     client: AzureOpenAI,
 ) -> AgentWorkflowState:
+    """Match agents and build the question queue deterministically (no LLM variance)."""
+    del client
     query = session.spec.problem_statement
     catalog = _load_catalog(settings)
     agents = _match_agents(query, catalog)
     if not agents:
-        agents = _load_spec_agents(settings)[:TARGET_MATCHED_AGENTS]
+        agents = _load_spec_agents(settings)[:3]
 
-    brief = format_catalog_brief_for_interview(query, settings, top_projects=2)
-    prior = _prior_context_block(session)
-    answered = json.dumps(
-        session.agent_workflow.answers if session.agent_workflow else {},
-        indent=2,
-        ensure_ascii=False,
-    )
-    if prior and prior != "(none)":
-        answered = f"{prior}\n\n{answered}"
-    history = "\n".join(
-        f"{m.role}: {m.content[:300]}"
-        for m in session.messages[-8:]
-    )
-
-    system = (
-        load_prompt("agent_workflow_interview.txt")
-        .replace("{catalog_brief}", brief)
-        .replace("{problem_statement}", query)
-        .replace("{history}", history or "(none)")
-        .replace("{answered}", answered or "(none)")
-    )
-    try:
-        raw = call_llm(
-            client,
-            settings,
-            system,
-            "Return the JSON object for agent matching and setup questions.",
-            json_mode=True,
-            temperature=0.2,
+    matched = [
+        MatchedAgentSummary(
+            agent_id=a.id,
+            name=a.name,
+            reason=(a.function_summary or "")[:140],
         )
-        state = _parse_llm_workflow(raw, catalog, query)
-        if state and (state.matched_agents or state.questions):
-            state.matched_agents = _enrich_matched_agents(
-                state.matched_agents,
-                query,
-                catalog,
-                settings,
-            )
-            if not state.matched_agents and agents:
-                state.matched_agents = [
-                    MatchedAgentSummary(
-                        agent_id=a.id,
-                        name=a.name,
-                        reason=(a.function_summary or "")[:140],
-                    )
-                    for a in agents
-                ]
-            matched_records = _agents_for_matched(state.matched_agents, catalog) or agents
-            full_queue = _build_questions_deterministic(matched_records, query)
-            state.questions = _merge_question_queues(
-                state.questions, full_queue, query
-            )
-            state.required_input_count = _compute_required_input_count(
-                matched_records, query
-            )
-            _set_phase(state, "interview", context="_init_workflow_state:llm_success")
-            _refresh_metrics(state)
-            return state
-    except Exception as exc:
-        logger.warning("Agent workflow LLM init failed: %s", exc)
-
-    matched = _enrich_matched_agents([], query, catalog, settings)
-    if not matched:
-        matched = [
-            MatchedAgentSummary(
-                agent_id=a.id,
-                name=a.name,
-                reason=(a.function_summary or "")[:140],
-            )
-            for a in agents
-        ]
+        for a in agents
+    ]
     state = AgentWorkflowState(
         query_understood=query[:200],
         matched_agents=matched,
@@ -947,7 +843,7 @@ def _init_workflow_state(
         next_index=0,
         required_input_count=_compute_required_input_count(agents, query),
     )
-    _set_phase(state, "interview", context="_init_workflow_state:fallback")
+    _set_phase(state, "interview", context="_init_workflow_state:deterministic")
     _refresh_metrics(state)
     return state
 
@@ -1011,6 +907,8 @@ def _question_item_to_interview(
     session: InterviewSession | None = None,
     client: AzureOpenAI | None = None,
 ) -> InterviewQuestion:
+    """Use the pre-built question and input-specific chips (stable per agent input)."""
+    del client
     agent: AgentRecord | None = None
     if settings:
         for row in _load_spec_agents(settings):
@@ -1018,81 +916,20 @@ def _question_item_to_interview(
                 agent = row
                 break
 
-    deterministic = (
-        _chips_for_input(agent, q.input_name) if agent else list(q.chips)
-    )
-    direct = _topic_aligned_chip(q.input_name)
-    if direct and all(c.lower().strip() != direct.lower() for c in deterministic):
-        non_other = [
-            c for c in deterministic if c.lower().strip() != OTHER_CHIP.lower()
-        ]
-        deterministic = [direct, *non_other[:5], OTHER_CHIP]
+    if q.chips:
+        chips = list(q.chips)
+    elif agent:
+        chips = _chips_for_input(agent, q.input_name)
+    else:
+        chips = [OTHER_CHIP]
 
     query = session.spec.problem_statement if session else ""
-    llm_core = [c for c in q.chips if c.lower().strip() != OTHER_CHIP.lower()]
-
-    if agent and settings:
-        catalog = _load_catalog(settings)
-        catalog_patterns = (
-            catalog_values_for_input(catalog, agent, q.input_name)
-            if interview_uses_fast_chips()
-            else []
-        )
-        contextual: list[str] = []
-        if session and interview_uses_fast_chips():
-            contextual = contextual_chips_from_conversation(
-                f"agent_input:{q.input_name}",
-                session.spec,
-                session.messages,
-            )
-
-        if interview_uses_fast_chips():
-            chips = merge_and_gate_chips(
-                deterministic=deterministic,
-                catalog=catalog_patterns[:6],
-                contextual=contextual,
-                llm=llm_core,
-                input_name=q.input_name,
-                agent_summary=agent.function_summary or "",
-            )
-            suggested = pick_suggested_chip(
-                chips, query=query, rank_hint=q.rank_score
-            )
-            if deterministic:
-                first_det = next(
-                    (c for c in deterministic if c != OTHER_CHIP), None
-                )
-                if first_det and first_det in chips:
-                    suggested = first_det
-            reason = (
-                f"Grounded in catalog input `{q.input_name}` for {agent.name} "
-                "(catalog-backed suggestions)."
-            )
-        else:
-            if client is None:
-                client = make_client(settings)
-            chips, suggested, reason = build_agent_input_chips(
-                agent,
-                q.input_name,
-                query,
-                settings,
-                deterministic=deterministic,
-                spec=session.spec if session else None,
-                messages=session.messages if session else None,
-                llm_chips=llm_core,
-                turn_index=len(session.messages) if session else 0,
-                client=client,
-                question_text=q.question,
-            )
-    else:
-        chips = merge_and_gate_chips(
-            deterministic=deterministic,
-            llm=llm_core,
-            input_name=q.input_name,
-            agent_summary=q.agent_name,
-        )
-        suggested = pick_suggested_chip(chips, query=query, rank_hint=q.rank_score)
-        reason = f"Maps to spec.json input: {q.input_name}."
+    suggested = pick_suggested_chip(chips, query=query, rank_hint=q.rank_score)
+    reason = (
+        f"Options for `{q.input_name}` on {q.agent_name}."
+        if agent
+        else f"Maps to spec.json input: {q.input_name}."
+    )
 
     if not suggested:
         suggested = pick_suggested_chip(chips, query=query, rank_hint=q.rank_score)
@@ -1151,7 +988,7 @@ def _catalog_hints_for_workflow(
     return build_catalog_hints_for_interview(
         session.spec.problem_statement,
         settings,
-        top_k=12,
+        top_k=8,
         preferred_agent_ids=hint_ids,
     )
 
@@ -1227,8 +1064,14 @@ def advance_agent_workflow_turn(
     if _workflow_is_complete(state, user_answer=user_answer):
         _set_phase(state, "completion_check", context="advance:completion_gate")
         session.spec.transcript_summary = format_workflow_configured(state, settings)
-        from services.interview import _finalize_session
+        from services.interview import _finalize_session, update_spec
 
+        session.spec = update_spec(
+            session.spec,
+            session.messages,
+            settings,
+            client=client,
+        )
         session.messages.append(
             ChatMessage(
                 role="assistant",

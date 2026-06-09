@@ -15,6 +15,7 @@ from schemas.agent_record import (
     normalize_vertical,
     slugify,
 )
+from services.agent_kind import classify_implementation_kind
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,14 @@ def _parse_agent(item: dict, source_page: int = 1) -> AgentRecord:
     if version and version != "1.0":
         agent_id = f"{agent_id}-v{version.replace('.', '-')}"
 
-    return AgentRecord(
+    raw_kind = (item.get("implementation_kind") or "").strip().lower()
+    implementation_kind = (
+        raw_kind
+        if raw_kind in ("agent", "function", "tool")
+        else None
+    )
+
+    record = AgentRecord(
         id=agent_id,
         name=name,
         version=version,
@@ -74,7 +82,13 @@ def _parse_agent(item: dict, source_page: int = 1) -> AgentRecord:
         typical_accuracy=item.get("typical_accuracy"),
         notes=item.get("notes"),
         source_page=int(item.get("source_page", source_page)),
+        implementation_kind=implementation_kind or "agent",
     )
+    if not implementation_kind:
+        record = record.model_copy(
+            update={"implementation_kind": classify_implementation_kind(record)}
+        )
+    return record
 
 
 def _normalize_entries(data: object) -> list[dict]:

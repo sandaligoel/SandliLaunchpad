@@ -1,4 +1,5 @@
 import type { ArchitecturePlan, GraphNode, NodeRuntimeMeta } from "@/architecture-flow/types/plan";
+import { parseSubcomponents } from "@/utils/agentKind";
 
 const TOOL_POOL = [
   "Azure AI Search",
@@ -249,7 +250,13 @@ export function mockRuntimeForNode(
 ): NodeRuntimeMeta {
   const h = hash(node.id);
   const retries = h % 7 === 0 ? 1 : 0;
-  const tools = TOOL_POOL.filter((_, i) => (h >> i) & 1).slice(0, 3);
+  const catalogNotes = node.metadata?.catalog_notes;
+  const subAgents = parseSubcomponents(
+    typeof catalogNotes === "string" ? catalogNotes : undefined,
+  );
+  let tools = subAgents.length
+    ? subAgents
+    : TOOL_POOL.filter((_, i) => (h >> i) & 1).slice(0, 3);
   if (!tools.length) tools.push(TOOL_POOL[h % TOOL_POOL.length]);
 
   const built = buildNodeIoPayload(node, plan);

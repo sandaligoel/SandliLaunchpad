@@ -175,9 +175,16 @@ def _connect_components(
         out_degree[e.from_id] += 1
         in_degree[e.to_id] += 1
 
+    node_by_id = {n.id: n for n in nodes}
+
     for i in range(len(comps) - 1):
         left = comps[i]
         right = comps[i + 1]
+        if len(right) == 1:
+            only = right[0]
+            node = node_by_id.get(only)
+            if node and _is_exit_node(node):
+                continue
         sink = max(left, key=lambda nid: (out_degree[nid], -rank.get(nid, 0)))
         source = min(right, key=lambda nid: (in_degree[nid], rank.get(nid, 9999)))
         bridge = GraphEdge(from_id=sink, to_id=source, label="flow")
@@ -204,6 +211,86 @@ def _linear_chain_if_empty(nodes: list[GraphNode]) -> list[GraphEdge]:
     return edges
 
 
+def _is_exit_node(node: GraphNode) -> bool:
+    blob = f"{node.id} {node.label or ''} {(node.description or '')}".lower()
+    return any(
+        token in blob
+        for token in (
+            "workflow-end",
+            "copilot-response",
+            " final response",
+            "end point",
+            "endpoint",
+        )
+    ) or (
+        "end" in blob.split()
+        or blob.strip().endswith(" end")
+        or node.label.strip().lower() == "end"
+    )
+
+
+def _ensure_exit_node(
+    nodes: list[GraphNode], edges: list[GraphEdge]
+) -> tuple[list[GraphNode], list[GraphEdge]]:
+    """
+    Add a terminal End node when parallel branches have no merge point.
+
+    Common when the planner outputs gateway → Quin + Eryl without a sink.
+    """
+    if len(nodes) < 2:
+        return nodes, edges
+
+    node_ids = {n.id for n in nodes}
+    out_degree = {nid: 0 for nid in node_ids}
+    in_degree = {nid: 0 for nid in node_ids}
+    for edge in edges:
+        if edge.from_id in out_degree:
+            out_degree[edge.from_id] += 1
+        if edge.to_id in in_degree:
+            in_degree[edge.to_id] += 1
+
+    sinks = [nid for nid in node_ids if out_degree.get(nid, 0) == 0]
+    if len(sinks) <= 1:
+        return nodes, edges
+
+    exit_nodes = [n for n in nodes if _is_exit_node(n)]
+    if len(exit_nodes) == 1 and exit_nodes[0].id in sinks:
+        target = exit_nodes[0].id
+        out = list(edges)
+        for sid in sinks:
+            if sid == target:
+                continue
+            pair = (sid, target)
+            if not any(e.from_id == pair[0] and e.to_id == pair[1] for e in out):
+                out.append(GraphEdge(from_id=sid, to_id=target, label="answer"))
+        return nodes, _dedupe_edges(out)
+
+    end_id = "workflow-end"
+    if end_id in node_ids:
+        end_id = "copilot-response-end"
+
+    end_node = GraphNode(
+        id=end_id,
+        label="End",
+        type="gateway",
+        agent_id=None,
+        description="Final copilot response returned to the user.",
+    )
+    new_nodes = list(nodes)
+    if end_id not in node_ids:
+        new_nodes.append(end_node)
+
+    new_edges = list(edges)
+    for sid in sinks:
+        if sid == end_id:
+            continue
+        pair = (sid, end_id)
+        if not any(e.from_id == pair[0] and e.to_id == pair[1] for e in new_edges):
+            new_edges.append(GraphEdge(from_id=sid, to_id=end_id, label="answer"))
+
+    return new_nodes, _dedupe_edges(new_edges)
+
+
 def sanitize_graph(graph: GraphDraft) -> GraphDraft:
     """
     Repair a graph for canvas display: valid ids, forward-only edges, connected DAG.
@@ -227,9 +314,54 @@ def sanitize_graph(graph: GraphDraft) -> GraphDraft:
     node_ids = [n.id for n in nodes]
     edges = _filter_forward_edges(node_ids, edges)
     edges = _connect_components(nodes, edges)
-    edges = _connect_dangling_sinks(node_ids, edges)
 
     if not edges and len(nodes) >= 2:
         edges = _linear_chain_if_empty(nodes)
 
+    # Before dangling-sink merge — parallel branches (Quin + Eryl) need End, not each other.
+    nodes, edges = _ensure_exit_node(nodes, edges)
+    edges = _bridge_human_gates(nodes, edges)
+
+    node_ids = [n.id for n in nodes]
+    edges = _connect_dangling_sinks(node_ids, edges)
+
     return GraphDraft(nodes=nodes, edges=edges)
+
+
+def _is_human_node(node: GraphNode) -> bool:
+    blob = f"{node.id} {node.label} {node.type or ''}".lower()
+    return node.type == "human" or any(
+        token in blob for token in ("analyst", "human", "hitl", "review")
+    )
+
+
+def _bridge_human_gates(
+    nodes: list[GraphNode], edges: list[GraphEdge]
+) -> list[GraphEdge]:
+    """Connect human-in-the-loop steps to the next node when the planner omits the edge."""
+    if len(nodes) < 2:
+        return edges
+
+    node_ids = [n.id for n in nodes]
+    order = _topo_order(node_ids, edges)
+    rank = {nid: i for i, nid in enumerate(order)}
+    out = list(edges)
+    seen = {(e.from_id, e.to_id) for e in out}
+
+    for node in nodes:
+        if not _is_human_node(node):
+            continue
+        r = rank.get(node.id)
+        if r is None:
+            continue
+        successors = [nid for nid in order if rank.get(nid, 0) > r]
+        if not successors:
+            continue
+        nxt = successors[0]
+        pair = (node.id, nxt)
+        if pair in seen or pair[0] == pair[1]:
+            continue
+        out.append(GraphEdge(from_id=node.id, to_id=nxt, label="flow"))
+        seen.add(pair)
+
+    return _dedupe_edges(out)

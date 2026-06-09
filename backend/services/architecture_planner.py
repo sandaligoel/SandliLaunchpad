@@ -17,26 +17,27 @@ from schemas.architecture_plan import (
     ArchitectureValidationReport,
     CatalogMatch,
     ReuseDecision,
-    ReuseDecisionType,
 )
 from schemas.architecture_spec import (
     ArchitectureSpec,
-    CatalogHint,
     GraphDraft,
     GraphEdge,
     GraphNode,
     InterviewSession,
 )
 from services.architecture_validator import validate_architecture_plan
+from services.catalog_interview_context import (
+    DATA_COPILOT_AGENT_IDS,
+    _agent_by_id,
+    _load_catalog,
+    is_data_copilot_query,
+)
 from services.graph_sanitizer import normalize_node_id, sanitize_graph
 from services.llm import call_llm, load_prompt, make_client, strip_json_fences
 
 logger = logging.getLogger(__name__)
 
 MIN_SPEC_STATUS = ("sufficient", "ready")
-CATALOG_MATCH_TOP_K = 12
-CATALOG_MATCH_LIMIT = 25
-_PROCESSING_NODE_TYPES = frozenset({"agent", "custom"})
 
 
 def _field_value(spec: ArchitectureSpec, key: str) -> str:
@@ -80,85 +81,91 @@ def _build_search_queries(spec: ArchitectureSpec) -> list[str]:
     if not queries:
         queries.append(enriched[:800] if enriched else spec.problem_statement[:500])
 
+    if is_data_copilot_query(spec.problem_statement):
+        queries.insert(
+            0,
+            "Quin SQL Eryl semantic RAG copilot structured unstructured data bot",
+        )
+
     return queries[:4]
-
-
-def _matches_from_catalog_hints(hints: list[CatalogHint]) -> dict[str, CatalogMatch]:
-    """Seed planning matches from interview hints (no embedding/search call)."""
-    by_id: dict[str, CatalogMatch] = {}
-    for hint in hints:
-        agent_id = str(hint.agent_id or "").strip()
-        if not agent_id:
-            continue
-        by_id[agent_id] = CatalogMatch(
-            agent_id=agent_id,
-            name=hint.name or "Unknown",
-            category=hint.category or "",
-            origin_client=hint.origin_client or "",
-            origin_project=hint.origin_project or "",
-            function_summary=(hint.function_summary or "")[:300],
-            score=float(hint.score or 0.0),
-            matched_for="interview_hints",
-        )
-    return by_id
-
-
-def _merge_search_rows(
-    by_id: dict[str, CatalogMatch],
-    rows: list[dict],
-    *,
-    matched_for: str,
-) -> None:
-    for row in rows:
-        agent_id = str(row.get("id") or "").strip()
-        if not agent_id:
-            continue
-        score = float(row.get("score") or 0.0)
-        existing = by_id.get(agent_id)
-        if existing and existing.score >= score:
-            continue
-        by_id[agent_id] = CatalogMatch(
-            agent_id=agent_id,
-            name=str(row.get("name") or "Unknown"),
-            category=str(row.get("category") or ""),
-            origin_client=str(row.get("origin_client") or ""),
-            origin_project=str(row.get("origin_project") or ""),
-            function_summary=str(row.get("function_summary") or "")[:300],
-            score=score,
-            matched_for=matched_for[:80],
-        )
 
 
 def _fetch_catalog_matches(
     spec: ArchitectureSpec,
     settings: Settings,
     *,
-    top_k_per_query: int = CATALOG_MATCH_TOP_K,
+    top_k_per_query: int = 5,
 ) -> list[CatalogMatch]:
     """
-    Build catalog matches for planning: reuse interview hints, then one search.
+    Run multiple catalog searches and merge by best score per agent id.
 
     Side effects:
-        At most one Azure OpenAI embedding + Azure AI Search query.
+        Azure OpenAI embeddings + Azure AI Search queries.
     """
-    by_id = _matches_from_catalog_hints(spec.catalog_hints or [])
+    by_id: dict[str, CatalogMatch] = {}
 
-    queries = _build_search_queries(spec)
-    primary = queries[0] if queries else (spec.problem_statement or "")[:500]
-    if primary.strip():
+    for query in _build_search_queries(spec):
         try:
-            rows = search_agents(primary.strip(), settings, top_k=top_k_per_query)
-            _merge_search_rows(by_id, rows, matched_for=primary)
+            rows = search_agents(query, settings, top_k=top_k_per_query)
         except Exception as exc:
-            logger.warning("Catalog search failed for planning: %s", exc)
+            logger.warning("Catalog search failed for query snippet: %s", exc)
+            continue
+
+        for row in rows:
+            agent_id = str(row.get("id") or "").strip()
+            if not agent_id:
+                continue
+            score = float(row.get("score") or 0.0)
+            existing = by_id.get(agent_id)
+            if existing and existing.score >= score:
+                continue
+            by_id[agent_id] = CatalogMatch(
+                agent_id=agent_id,
+                name=str(row.get("name") or "Unknown"),
+                category=str(row.get("category") or ""),
+                origin_client=str(row.get("origin_client") or ""),
+                origin_project=str(row.get("origin_project") or ""),
+                function_summary=str(row.get("function_summary") or "")[:300],
+                score=score,
+                matched_for=query[:80],
+            )
 
     matches = sorted(by_id.values(), key=lambda m: m.score, reverse=True)
-    logger.info(
-        "Catalog matches for planning: %d agents (%d from hints)",
-        len(matches),
-        len(spec.catalog_hints or []),
-    )
-    return matches[:CATALOG_MATCH_LIMIT]
+    matches = _ensure_copilot_catalog_matches(spec, settings, matches)
+    logger.info("Catalog matches for planning: %d agents", len(matches))
+    return matches[:20]
+
+
+def _ensure_copilot_catalog_matches(
+    spec: ArchitectureSpec,
+    settings: Settings,
+    matches: list[CatalogMatch],
+) -> list[CatalogMatch]:
+    """Pin Quin + Eryl + intent classifier for data copilot problems."""
+    if not is_data_copilot_query(spec.problem_statement):
+        return matches
+    catalog = _load_catalog(settings)
+    by_agent = _agent_by_id(catalog.agents)
+    by_id = {m.agent_id: m for m in matches}
+    for aid in DATA_COPILOT_AGENT_IDS:
+        agent = by_agent.get(aid)
+        if not agent:
+            continue
+        existing = by_id.get(aid)
+        if existing:
+            existing.score = max(existing.score, 0.92)
+            continue
+        by_id[aid] = CatalogMatch(
+            agent_id=agent.id,
+            name=agent.name,
+            category=agent.category,
+            origin_client=agent.origin_client,
+            origin_project=agent.origin_project,
+            function_summary=(agent.function_summary or "")[:300],
+            score=0.92,
+            matched_for="data copilot routing (Quin SQL + Eryl RAG)",
+        )
+    return sorted(by_id.values(), key=lambda m: m.score, reverse=True)
 
 
 def refresh_catalog_matches(
@@ -264,133 +271,6 @@ def _apply_catalog_ids(
         )
 
     return sanitize_graph(GraphDraft(nodes=nodes, edges=edges))
-
-
-def _token_set(text: str) -> set[str]:
-    return {
-        w
-        for w in re.findall(r"[a-z0-9]+", (text or "").lower())
-        if len(w) > 2
-    }
-
-
-def _best_catalog_match_for_step(
-    label: str,
-    description: str,
-    matches: list[CatalogMatch],
-    *,
-    used_agent_ids: set[str],
-) -> tuple[CatalogMatch | None, float]:
-    """Score catalog agents against a graph step; prefer unused agents."""
-    node_tokens = _token_set(f"{label} {description}")
-    if not node_tokens or not matches:
-        return None, 0.0
-
-    best: tuple[float, CatalogMatch] | None = None
-    for match in matches:
-        agent_tokens = _token_set(
-            f"{match.name} {match.function_summary} {match.category}"
-        )
-        if not agent_tokens:
-            continue
-        overlap = len(node_tokens & agent_tokens) / max(len(node_tokens), 1)
-        score = overlap * 0.55 + float(match.score) * 0.45
-        if match.agent_id in used_agent_ids:
-            score *= 0.85
-        if best is None or score > best[0]:
-            best = (score, match)
-    if best is None:
-        return None, 0.0
-    return best[1], best[0]
-
-
-def _boost_catalog_reuse(
-    graph: GraphDraft,
-    decisions: list[ReuseDecision],
-    matches: list[CatalogMatch],
-) -> tuple[GraphDraft, list[ReuseDecision]]:
-    """
-    Upgrade build steps to adapt/reuse when catalog agents fit.
-
-    Ensures more catalog agents appear in every architecture plan.
-    """
-    if not matches:
-        return graph, decisions
-
-    by_node = {d.node_id: d for d in decisions}
-    used_agents = {
-        d.agent_id for d in decisions if d.agent_id and d.decision != "build"
-    }
-    nodes_by_id = {n.id: n for n in graph.nodes}
-    upgraded = 0
-
-    for node in graph.nodes:
-        if node.type not in _PROCESSING_NODE_TYPES:
-            continue
-        dec = by_node.get(node.id)
-        if dec and dec.decision != "build" and dec.agent_id:
-            used_agents.add(dec.agent_id)
-            continue
-
-        match, fit = _best_catalog_match_for_step(
-            node.label,
-            node.description or "",
-            matches,
-            used_agent_ids=used_agents,
-        )
-        if not match:
-            continue
-
-        decision_type: ReuseDecisionType = "build"
-        if fit >= 0.38 or match.score >= 0.4:
-            decision_type = "reuse"
-        elif fit >= 0.18 or match.score >= 0.22:
-            decision_type = "adapt"
-
-        if decision_type == "build":
-            continue
-
-        used_agents.add(match.agent_id)
-        nodes_by_id[node.id] = node.model_copy(
-            update={"type": "agent", "agent_id": match.agent_id}
-        )
-        rationale = (
-            f"Catalog-first: mapped to {match.name} "
-            f"(fit={fit:.2f}, search={match.score:.2f})."
-        )
-        if dec:
-            by_node[node.id] = dec.model_copy(
-                update={
-                    "decision": decision_type,
-                    "agent_id": match.agent_id,
-                    "agent_name": match.name,
-                    "catalog_score": match.score,
-                    "rationale": rationale,
-                }
-            )
-        else:
-            by_node[node.id] = ReuseDecision(
-                node_id=node.id,
-                node_label=node.label,
-                decision=decision_type,
-                agent_id=match.agent_id,
-                agent_name=match.name,
-                catalog_score=match.score,
-                rationale=rationale,
-            )
-        upgraded += 1
-
-    if upgraded:
-        logger.info("Catalog reuse boost: upgraded %d steps", upgraded)
-
-    updated_nodes = [nodes_by_id.get(n.id, n) for n in graph.nodes]
-    ordered: list[ReuseDecision] = []
-    for node in graph.nodes:
-        dec = by_node.get(node.id)
-        if dec:
-            ordered.append(dec)
-
-    return GraphDraft(nodes=updated_nodes, edges=graph.edges), ordered
 
 
 def _ensure_reuse_decisions(
@@ -512,8 +392,6 @@ def plan_architecture(
                     continue
 
         decisions = _ensure_reuse_decisions(graph, decisions, matches)
-        graph, decisions = _boost_catalog_reuse(graph, decisions, matches)
-        decisions = _ensure_reuse_decisions(graph, decisions, matches)
 
         plan = ArchitecturePlan(
             graph=graph,
@@ -527,17 +405,6 @@ def plan_architecture(
     except Exception as exc:
         logger.error("Architecture planning LLM failed: %s", exc)
         plan = _fallback_from_graph_draft(spec, matches)
-        boosted_graph, boosted_decisions = _boost_catalog_reuse(
-            plan.graph, plan.reuse_decisions, matches
-        )
-        plan = plan.model_copy(
-            update={
-                "graph": boosted_graph,
-                "reuse_decisions": _ensure_reuse_decisions(
-                    boosted_graph, boosted_decisions, matches
-                ),
-            }
-        )
 
     for warning in _validate_graph(plan.graph):
         logger.warning("Graph validation: %s", warning)

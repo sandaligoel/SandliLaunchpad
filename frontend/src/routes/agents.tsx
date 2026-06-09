@@ -5,7 +5,9 @@ import { Topbar } from "@/components/layout/Topbar";
 import { Card } from "@/components/af/Card";
 import { Badge } from "@/components/af/Badge";
 import { useAgents } from "@/api/hooks";
-import type { AgentDef } from "@/types/api";
+import type { AgentDef, ImplementationKind } from "@/types/api";
+import { ImplementationKindLegend } from "@/components/shared/ImplementationKindLegend";
+import { KIND_META, classifyAgentDef, kindBadgeStyle } from "@/utils/agentKind";
 import {
   Database,
   Table,
@@ -52,18 +54,22 @@ function Agents() {
   const { data: agents = [], isLoading, isError, error } = useAgents();
   const [active, setActive] = useState<AgentDef | null>(null);
   const [q, setQ] = useState("");
+  const [kindFilter, setKindFilter] = useState<ImplementationKind | "all">("all");
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return agents;
-    return agents.filter(
-      (a) =>
+    return agents.filter((a) => {
+      const kind = a.implementationKind ?? classifyAgentDef(a);
+      if (kindFilter !== "all" && kind !== kindFilter) return false;
+      if (!needle) return true;
+      return (
         a.name.toLowerCase().includes(needle) ||
         a.category.toLowerCase().includes(needle) ||
         a.description.toLowerCase().includes(needle) ||
-        a.summary.toLowerCase().includes(needle),
-    );
-  }, [agents, q]);
+        a.summary.toLowerCase().includes(needle)
+      );
+    });
+  }, [agents, q, kindFilter]);
 
   return (
     <AppShell>
@@ -76,14 +82,46 @@ function Agents() {
         }
       />
       <main className="p-6 overflow-auto space-y-4">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-background w-full max-w-md">
-          <Search size={13} className="text-muted-foreground shrink-0" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search agents, category, client…"
-            className="bg-transparent text-sm outline-none flex-1"
-          />
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border bg-background w-full max-w-md">
+            <Search size={13} className="text-muted-foreground shrink-0" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search agents, category, client…"
+              className="bg-transparent text-sm outline-none flex-1"
+            />
+          </div>
+          <ImplementationKindLegend />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["all", "agent", "function", "tool"] as const).map((k) => {
+            const active = kindFilter === k;
+            const label =
+              k === "all" ? "All" : KIND_META[k].label + "s";
+            const chipStyle = k === "all" ? undefined : kindBadgeStyle(k, "sidebar");
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKindFilter(k)}
+                className={`rounded-full border px-3.5 py-1.5 text-xs font-extrabold uppercase tracking-wide transition ${
+                  active ? "ring-2 ring-offset-2 ring-offset-background ring-primary/25" : "opacity-90 hover:opacity-100"
+                }`}
+                style={
+                  chipStyle
+                    ? {
+                        color: chipStyle.color,
+                        background: chipStyle.background,
+                        borderColor: chipStyle.borderColor,
+                      }
+                    : undefined
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {isLoading ? (
@@ -103,23 +141,47 @@ function Agents() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((a) => {
               const Icon = ICONS[a.icon as keyof typeof ICONS] ?? Wrench;
+              const implKind = a.implementationKind ?? classifyAgentDef(a);
+              const kindMeta = KIND_META[implKind];
               return (
                 <button
                   key={a.type}
                   onClick={() => setActive(a)}
                   className="text-left focus:outline-none focus:ring-2 ring-primary/40 rounded-lg"
                 >
-                  <Card className="overflow-hidden hover:shadow-md hover:border-primary/40 transition-all cursor-pointer h-full">
+                  <Card
+                    className="overflow-hidden hover:shadow-lg transition-all cursor-pointer h-full border-2"
+                    style={{
+                      borderColor: kindMeta.border,
+                      boxShadow: `0 0 0 1px ${kindMeta.border}33, 0 8px 24px ${kindMeta.glow}`,
+                    }}
+                  >
+                    <div
+                      className="h-1.5 w-full"
+                      style={{
+                        background: `linear-gradient(90deg, ${kindMeta.stripe}, ${kindMeta.solid})`,
+                      }}
+                      aria-hidden
+                    />
                     <div
                       className="px-4 py-3 flex items-center gap-2.5 text-white"
-                      style={{ background: a.color }}
+                      style={{
+                        background: `linear-gradient(135deg, ${kindMeta.solid} 0%, ${a.color} 55%)`,
+                      }}
                     >
                       <Icon size={16} />
                       <h3 className="text-sm font-semibold flex-1">{a.name}</h3>
-                      <Settings2 size={14} className="opacity-80" />
+                      <span
+                        className="rounded-md border-2 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-widest bg-black/25"
+                        style={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff" }}
+                      >
+                        {kindMeta.shortLabel}
+                      </span>
                     </div>
                     <div className="p-4 space-y-3">
-                      <Badge variant="info">{a.category}</Badge>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge variant="info">{a.category}</Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground line-clamp-2">
                         {a.description}
                       </p>
@@ -178,19 +240,37 @@ function CatalogDrawer({
   onClose: () => void;
 }) {
   const Icon = ICONS[agent.icon as keyof typeof ICONS] ?? Wrench;
+  const implKind = agent.implementationKind ?? classifyAgentDef(agent);
+  const kindMeta = KIND_META[implKind];
 
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-md bg-surface border-l border-border h-full flex flex-col shadow-2xl animate-in slide-in-from-right">
+      <div
+        className="w-full max-w-md bg-surface border-l-4 h-full flex flex-col shadow-2xl animate-in slide-in-from-right"
+        style={{ borderLeftColor: kindMeta.solid }}
+      >
         <div
           className="px-4 py-3 flex items-center gap-2.5 text-white"
-          style={{ background: agent.color }}
+          style={{
+            background: `linear-gradient(135deg, ${kindMeta.solid} 0%, ${agent.color} 70%)`,
+          }}
         >
           <Icon size={16} />
           <div className="flex-1 min-w-0">
-            <div className="text-[10.5px] uppercase tracking-wider opacity-80">
-              {agent.type}
+            <div className="text-[10.5px] uppercase tracking-wider flex items-center gap-2">
+              <span
+                className="rounded-md border-2 px-2 py-0.5 font-extrabold tracking-widest"
+                style={{
+                  color: "#fff",
+                  background: "rgba(0,0,0,0.28)",
+                  borderColor: "rgba(255,255,255,0.55)",
+                  boxShadow: `0 0 12px ${kindMeta.glow}`,
+                }}
+              >
+                {kindMeta.shortLabel}
+              </span>
+              <span className="opacity-80">{agent.type}</span>
             </div>
             <h3 className="text-sm font-semibold truncate">{agent.name}</h3>
           </div>

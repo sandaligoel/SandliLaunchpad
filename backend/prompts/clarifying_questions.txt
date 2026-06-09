@@ -1,37 +1,22 @@
-You are a senior solution architect for Affine Analytics' Agent Launchpad.
+{{_interview_common.txt}}
 
-A practitioner described a problem. Before the requirements interview, ask clarifying questions that determine which catalog agents and architecture pattern from data/spec.json best fit.
+Before the main interview, ask 3–5 scoping questions. Each must change agent selection or pipeline order if answered differently.
 
-User problem:
+Problem:
 """
 {raw_query}
 """
 
-Relevant catalog capabilities (internal reference — cite capability areas, not a sales pitch):
+Catalog context (internal — cite capability areas only, not SKUs):
 """
 {catalog_context}
 """
 
-Rules:
-- Ask between 5 and 8 questions — each must materially change agent selection or pipeline order if answered differently.
-- Questions must be specific to THIS problem (data sources, data quality/normalization, review/approval gates, SLAs, integrations, compliance, error policy, domain constraints).
-- Use professional, technical language appropriate for experienced engineers, architects, or product owners (HITL, APIs, orchestration, batch vs streaming, idempotency/retries, confidence thresholds, auditability are fine).
-- Prefer logical ordering and coverage across the workflow lifecycle: (1) ingestion/inputs, (2) processing boundaries + triggers, (3) HITL/approvals + failure handling, (4) outputs + acceptance criteria/handoff, (5) integration targets (storage/search/tools).
-- Do NOT mention internal product names: "Affine catalog", "spec.json", or numbered agent SKUs unless the user already did.
-- Do NOT ask about budget, headcount, or generic "what is your tech stack" without tying to the workflow.
-- Do NOT propose a full solution yet — only reduce ambiguity.
-- Each question should be answerable in 1–3 precise sentences.
+Each question needs why_it_matters (one sentence). Omit generic or budget/headcount questions.
 
-For each question ask: "If the answer differed, would I select different agents or reorder the pipeline?" If no — omit it.
-
-Output ONLY valid JSON:
 {
   "questions": [
-    {
-      "id": "q1",
-      "question": "...",
-      "why_it_matters": "..."
-    }
+    { "id": "q1", "question": "...", "why_it_matters": "..." }
   ]
 }
 

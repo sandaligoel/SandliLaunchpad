@@ -68,6 +68,7 @@ def normalize_vertical(value: str | None) -> Vertical:
     return "Other"
 
 AgentStatus = Literal["live", "available", "deprecated"]
+ImplementationKind = Literal["agent", "function", "tool"]
 
 
 def slugify(text: str) -> str:
@@ -104,6 +105,7 @@ class AgentRecord(BaseModel):
     notes: Optional[str] = None
     source_page: int
     embedding: Optional[list[float]] = None
+    implementation_kind: ImplementationKind = "agent"
 
 
 class ProjectRecord(BaseModel):

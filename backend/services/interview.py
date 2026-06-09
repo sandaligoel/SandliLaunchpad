@@ -54,6 +54,7 @@ from services.catalog_interview_context import (
     format_catalog_for_interview_prompt,
 )
 from services.clarifying_questions import (
+    chips_for_clarifying_question,
     clarifying_field_key,
     format_clarifying_summary,
     generate_clarifying_questions,
@@ -1333,18 +1334,12 @@ def _clarifying_to_interview_question(
         messages or [],
         target_field="core_components",
     )
-    scope_chips = suggest_clarifying_chips(
-        clarifying_query,
+    scope_chips = chips_for_clarifying_question(
+        item.id,
+        spec.problem_statement,
         settings,
         preferred_agent_ids=hint_ids,
     )
-    inline_chips = _extract_question_options(item.question)
-    if len(inline_chips) >= 3:
-        # For clarifying questions, clickable options should mirror question options first.
-        scope_chips = _ensure_chips("core_components", inline_chips)
-    elif inline_chips:
-        # If we only extracted 1-2 options, blend with catalog-backed choices.
-        scope_chips = merge_catalog_chips("core_components", inline_chips, scope_chips)
     catalog_ref, catalog_why = catalog_suggestion_context(
         clarifying_query,
         settings,

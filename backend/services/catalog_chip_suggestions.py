@@ -88,13 +88,6 @@ def _dedupe_chips(chips: list[str]) -> list[str]:
     return [c for c in out if c]
 
 
-def _rotate_chips(chips: list[str], offset: int) -> list[str]:
-    if len(chips) < 2:
-        return chips
-    offset = offset % len(chips)
-    return chips[offset:] + chips[:offset]
-
-
 def _rank_chips(
     query: str,
     chips: list[str],
@@ -102,10 +95,13 @@ def _rank_chips(
     field_key: str = "",
     turn_index: int = 0,
 ) -> list[str]:
+    """Stable ranking: relevance score, then alphabetical (same query → same order)."""
+    del turn_index
     deduped = _dedupe_chips(chips)
-    ranked = sorted(deduped, key=lambda c: _score_chip(query, c), reverse=True)
-    salt = turn_index + sum(ord(c) for c in field_key)
-    return _rotate_chips(ranked, salt)
+    return sorted(
+        deduped,
+        key=lambda c: (-_score_chip(query, c), c.lower()),
+    )
 
 
 def _interview_turn_index(messages: list["ChatMessage"]) -> int:
@@ -276,7 +272,7 @@ def recommend_first_interview_field(
         if len(_flow_steps_from_agents(agents)) >= 3:
             scores["architectural_flow"] = scores.get("architectural_flow", 0) + boost + 0.3
 
-    return max(scores, key=scores.get)
+    return max(scores, key=lambda k: (scores[k], k))
 
 
 def easy_question_for_project(
@@ -615,7 +611,6 @@ def suggest_chips_for_field(
     else:
         raw = []
 
-    raw = _rotate_chips(raw, turn_index + len(field_key))
     ranked_catalog = _rank_chips(
         query,
         raw,
@@ -624,7 +619,12 @@ def suggest_chips_for_field(
     )[: max(limit - 1, 3)]
 
     context: list[str] = []
-    if spec is not None and messages is not None:
+    # Only add session-context chips after the user has answered at least one interview turn.
+    if (
+        spec is not None
+        and messages is not None
+        and turn_index >= 1
+    ):
         context = contextual_chips_from_conversation(field_key, spec, messages)
 
     llm = llm_chips if llm_chips is not None else []

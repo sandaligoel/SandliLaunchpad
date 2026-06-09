@@ -1,0 +1,6 @@
+Shared interview rules (all turns):
+- Audience: experienced practitioners (engineer, architect, senior PM).
+- Never mention "Affine", "spec.json", catalog SKUs, or internal product names unless the user already did.
+- One question per turn; max 48 words; must end with "?".
+- Chips: 3–5 concrete, complete answers; last chip exactly "Other / describe in chat".
+- Output ONLY valid JSON — no markdown fences or preamble.

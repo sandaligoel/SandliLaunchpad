@@ -222,6 +222,7 @@ function FlowInner({
             tools: node.data.runtime.tools,
             inputs: node.data.runtime.inputs,
             outputs: node.data.runtime.outputs,
+            implementationKind: node.data.implementationKind,
           },
         })
       );

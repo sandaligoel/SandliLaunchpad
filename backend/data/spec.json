@@ -745,7 +745,7 @@
         "vertical": "CPG / Retail",
         "status": "available",
         "typical_accuracy": null,
-        "notes": "Agents: routing_agent, Sql_Generator, Sql_Executor, Sql_tool, Sql_Execution_Critic, Insight_Generator in Unified_Mdb.py."
+        "notes": "Structured/saturated data bot and SQL analytics; Agents: routing_agent, Sql_Generator, Sql_Executor, Sql_tool, Sql_Execution_Critic, Insight_Generator in Unified_Mdb.py. Keywords: quin, sql, saturated, structured data, sales analytics."
       },
       {
         "name": "Eryl Semantic RAG Agent Chain",
@@ -762,7 +762,7 @@
         "vertical": "CPG / Retail",
         "status": "available",
         "typical_accuracy": null,
-        "notes": "Agents: query_transformer, Selector_agent, retriever, llm_answer_maker, critic_agent."
+        "notes": "Unstructured/unsaturated semantic RAG over policy documents; Agents: query_transformer, Selector_agent, retriever, llm_answer_maker, critic_agent. Keywords: eryl, semantic, unsaturated, unstructured, document Q&A."
       },
       {
         "name": "Planogram Vision LLM Suite",

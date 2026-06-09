@@ -48,7 +48,7 @@ export interface SimulationState {
 }
 
 /** Time per step in the architecture walkthrough (increase for a slower demo). */
-export const SIMULATION_STEP_DURATION_MS = 4000;
+export const SIMULATION_STEP_DURATION_MS = 2000;
 
 export function useSimulation(plan: ArchitecturePlan | null) {
   const [nodes, setNodes] = useState<Node<FlowNodeData>[]>([]);

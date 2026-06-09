@@ -69,6 +69,71 @@ def _tokens(text: str) -> set[str]:
     return set(_TOKEN_RE.findall((text or "").lower()))
 
 
+# Mars Sales Genie copilot trio — SQL (Quin) + semantic RAG (Eryl) + intent routing.
+DATA_COPILOT_AGENT_IDS: tuple[str, ...] = (
+    "pipeline-intent-classifier",
+    "quin-sql-agent-chain",
+    "eryl-semantic-rag-agent-chain",
+)
+
+
+def is_data_copilot_query(query: str) -> bool:
+    """
+    Bot/copilot problems over structured + unstructured data (e.g. saturated/unsaturated).
+    Routes to Quin (SQL) and Eryl (RAG) from Mars Sales Genie.
+    """
+    q = (query or "").lower()
+    has_bot = any(
+        w in q
+        for w in (
+            "bot",
+            "chatbot",
+            "copilot",
+            "assistant",
+            "q&a",
+            "question answering",
+            "genie",
+        )
+    )
+    has_data = any(
+        w in q
+        for w in (
+            "data",
+            "saturated",
+            "unsaturated",
+            "sql",
+            "analytics",
+            "structured",
+            "unstructured",
+            "semantic",
+            "database",
+            "metric",
+            "inventory",
+            "sales",
+        )
+    )
+    return has_bot and has_data
+
+
+def _copilot_routing_boost(query: str, agent: AgentRecord) -> float:
+    if not is_data_copilot_query(query):
+        return 0.0
+    if agent.id in DATA_COPILOT_AGENT_IDS:
+        return 0.9
+    return 0.0
+
+
+def pinned_copilot_agents(
+    query: str,
+    agents: list[AgentRecord],
+) -> list[AgentRecord]:
+    """Return Pipeline + Quin + Eryl in stable order when query is a data copilot."""
+    if not is_data_copilot_query(query):
+        return []
+    by_id = _agent_by_id(agents)
+    return [by_id[aid] for aid in DATA_COPILOT_AGENT_IDS if aid in by_id]
+
+
 def _keyword_score(query: str, agent: AgentRecord) -> float:
     q = _tokens(query)
     if not q:
@@ -78,6 +143,7 @@ def _keyword_score(query: str, agent: AgentRecord) -> float:
             agent.name,
             agent.category,
             agent.function_summary,
+            agent.notes or "",
             agent.origin_project,
             agent.origin_client,
             " ".join(agent.integrations),
@@ -88,7 +154,8 @@ def _keyword_score(query: str, agent: AgentRecord) -> float:
     if not a:
         return 0.0
     overlap = len(q & a)
-    return overlap / max(len(q), 1)
+    base = overlap / max(len(q), 1)
+    return min(1.0, base + _copilot_routing_boost(query, agent))
 
 
 def _agent_by_id(agents: list[AgentRecord]) -> dict[str, AgentRecord]:
@@ -132,6 +199,11 @@ def build_catalog_hints_for_interview(
 
     merged: list[CatalogHint] = []
     seen: set[str] = set()
+
+    for agent in pinned_copilot_agents(text, all_agents):
+        if agent.id not in seen:
+            seen.add(agent.id)
+            merged.append(_hint_from_agent(agent, 0.96))
 
     for aid in preferred:
         agent = by_id.get(aid)

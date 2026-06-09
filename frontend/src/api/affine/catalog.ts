@@ -2,11 +2,14 @@ import type { AgentDef, FieldDef } from "@/types/api";
 
 const API_BASE = import.meta.env.VITE_AFFINE_API_BASE ?? "";
 
+export type ImplementationKind = "agent" | "function" | "tool";
+
 export interface CatalogAgentRecord {
   id: string;
   name: string;
   version: string;
   category: string;
+  implementation_kind?: ImplementationKind;
   function_summary: string;
   inputs: string[];
   outputs: string[];
@@ -68,6 +71,13 @@ function metaFields(agent: CatalogAgentRecord): FieldDef[] {
       value: agent.typical_accuracy,
     });
   }
+  if (agent.notes?.trim()) {
+    rows.push({
+      key: "notes",
+      label: "Notes",
+      value: agent.notes.trim(),
+    });
+  }
   return rows
     .filter((r) => r.value?.trim())
     .map((r) => ({
@@ -92,6 +102,7 @@ export function catalogAgentToAgentDef(agent: CatalogAgentRecord): AgentDef {
     type: agent.id,
     name: agent.name,
     category: agent.category,
+    implementationKind: agent.implementation_kind,
     description: agent.function_summary,
     summary:
       summaryParts.join(" · ") ||

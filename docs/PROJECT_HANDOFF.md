@@ -112,7 +112,7 @@ Each `POST /api/sessions/{id}/turn`:
 2. **`update_spec`** — LLM merges conversation into spec (`prompts/spec_update.txt`, JSON mode)
 3. **Validators** — `services/spec_validators.py` (latency format, flow length, etc.)
 4. **Architecture gate** — arch fields stay pending until user answers a dedicated question (not just inferred)
-5. **`next_question`** — code picks next field; LLM writes question + chips only (`prompts/next_question.txt` or field-specific prompts)
+5. **`next_question`** — code picks next field; LLM writes question + chips via `prompts/catalog_pattern_interview.txt` (shared rules in `_interview_common.txt`)
 6. **`ready`** → `synthesize_architecture_blueprint` → blueprint + graph_draft
 
 **Clarifying phase** (`services/clarifying_questions.py`):
@@ -206,7 +206,7 @@ Rule-based (not full business proof). Examples:
 | Want to change… | Edit |
 |-----------------|------|
 | Clarifying 3 questions | `prompts/clarifying_questions.txt`, `services/clarifying_questions.py` |
-| Interview questions / chips | `prompts/next_question.txt`, `requirements_question.txt`, `architecture_feedback_question.txt` |
+| Interview questions / chips | `prompts/agent_workflow_interview.txt`, `catalog_pattern_interview.txt`, `agent_input_chips.txt`, `_interview_common.txt` |
 | Spec merge behavior | `prompts/spec_update.txt`, `services/interview.py` |
 | Field order / required set | `schemas/architecture_spec.py` (`SUFFICIENT_REQUIREMENT_KEYS`, field lists) |
 | Architecture plan quality | `prompts/architecture_plan.txt`, `architecture_planner.py` |

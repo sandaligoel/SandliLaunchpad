@@ -78,13 +78,114 @@ export function sanitizeGraphDraft(graph: GraphDraft): GraphDraft {
     }));
   }
 
-  edges = connectDanglingSinks(
-    nodes.map((n) => n.id),
-    edges,
+  const withEnd = ensureExitNode(nodes, edges);
+
+  const bridged = bridgeHumanGates(withEnd.nodes, withEnd.edges, order);
+
+  const endEdges = connectDanglingSinks(
+    bridged.nodes.map((n) => n.id),
+    bridged.edges,
     rank,
   );
 
-  return { nodes, edges };
+  return { nodes: bridged.nodes, edges: endEdges };
+}
+
+function isHumanNode(node: GraphDraft["nodes"][number]): boolean {
+  const blob = `${node.id} ${node.label} ${node.type}`.toLowerCase();
+  return node.type === "human" || /\b(analyst|human|hitl|review)\b/.test(blob);
+}
+
+/** Wire human-in-the-loop steps to the next pipeline node when the planner omits the edge. */
+function bridgeHumanGates(
+  nodes: GraphDraft["nodes"],
+  edges: GraphEdge[],
+  order: string[],
+): GraphDraft {
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const rank = new Map(order.map((id, i) => [id, i]));
+  const seen = new Set(edges.map((e) => `${e.from_id}->${e.to_id}`));
+  const out = [...edges];
+
+  for (const node of nodes) {
+    if (!isHumanNode(node)) continue;
+    const r = rank.get(node.id);
+    if (r == null) continue;
+    const successors = order.filter((id) => (rank.get(id) ?? 0) > r && nodeIds.has(id));
+    const next = successors[0];
+    if (!next) continue;
+    const key = `${node.id}->${next}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ from_id: node.id, to_id: next, label: "flow" });
+  }
+
+  return { nodes, edges: out };
+}
+
+function isExitNode(node: GraphDraft["nodes"][number]): boolean {
+  const blob = `${node.id} ${node.label} ${node.description ?? ""}`.toLowerCase();
+  return (
+    blob.includes("workflow-end") ||
+    blob.includes("copilot-response") ||
+    node.label.trim().toLowerCase() === "end"
+  );
+}
+
+function ensureExitNode(
+  nodes: GraphDraft["nodes"],
+  edges: GraphEdge[],
+): GraphDraft {
+  if (nodes.length < 2) return { nodes, edges };
+
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const outDegree = new Map([...nodeIds].map((id) => [id, 0]));
+  for (const e of edges) {
+    outDegree.set(e.from_id, (outDegree.get(e.from_id) ?? 0) + 1);
+  }
+
+  const sinks = [...nodeIds].filter((id) => (outDegree.get(id) ?? 0) === 0);
+  if (sinks.length <= 1) return { nodes, edges };
+
+  const existingExit = nodes.find(isExitNode);
+  if (existingExit && sinks.includes(existingExit.id)) {
+    const endId = existingExit.id;
+    const seen = new Set(edges.map((e) => `${e.from_id}->${e.to_id}`));
+    const newEdges = [...edges];
+    for (const sid of sinks) {
+      if (sid === endId) continue;
+      const key = `${sid}->${endId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        newEdges.push({ from_id: sid, to_id: endId, label: "answer" });
+      }
+    }
+    return { nodes, edges: newEdges };
+  }
+
+  const endId = "workflow-end";
+  const newNodes = [...nodes];
+  if (!nodeIds.has(endId)) {
+    newNodes.push({
+      id: endId,
+      label: "End",
+      type: "gateway",
+      description: "Final copilot response returned to the user.",
+    });
+  }
+
+  const seen = new Set(edges.map((e) => `${e.from_id}->${e.to_id}`));
+  const newEdges = [...edges];
+  for (const sid of sinks) {
+    if (sid === endId) continue;
+    const key = `${sid}->${endId}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      newEdges.push({ from_id: sid, to_id: endId, label: "answer" });
+    }
+  }
+
+  return { nodes: newNodes, edges: newEdges };
 }
 
 function connectDanglingSinks(
@@ -103,7 +204,8 @@ function connectDanglingSinks(
     const boost = /output|workbench|end|complete/i.test(id) ? 1 : 0;
     return boost * 1000 + (rank.get(id) ?? 0);
   };
-  const primary = sinks.reduce((a, b) => (sinkPriority(a) >= sinkPriority(b) ? a : b));
+  const exitSink = sinks.find((id) => /workflow-end|copilot-response|^end$/i.test(id));
+  const primary = exitSink ?? sinks.reduce((a, b) => (sinkPriority(a) >= sinkPriority(b) ? a : b));
   const seen = new Set(edges.map((e) => `${e.from_id}->${e.to_id}`));
   const out = [...edges];
   for (const sid of sinks) {
@@ -111,7 +213,7 @@ function connectDanglingSinks(
     const key = `${sid}->${primary}`;
     if (!seen.has(key)) {
       seen.add(key);
-      out.push({ from_id: sid, to_id: primary, label: "flow" });
+      out.push({ from_id: sid, to_id: primary, label: exitSink ? "answer" : "flow" });
     }
   }
   return out;

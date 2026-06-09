@@ -49,10 +49,13 @@ export interface OutputDef {
   description: string;
 }
 
+export type ImplementationKind = "agent" | "function" | "tool";
+
 export interface AgentDef {
   type: AgentType;
   name: string;
   category: string;
+  implementationKind?: ImplementationKind;
   description: string;
   summary: string;
   color: string;

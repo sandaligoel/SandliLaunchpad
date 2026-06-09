@@ -5,6 +5,7 @@ import { adaptGuruPlanToFlowPlan } from "@/architecture-flow/adaptLaunchpadPlan"
 import { ArchitectureFlowView } from "@/architecture-flow/components/architecture/ArchitectureFlowView";
 import { hydratePlanStepMetadata } from "@/utils/stepIo";
 import { Maximize2 } from "lucide-react";
+import { ImplementationKindLegend } from "@/components/shared/ImplementationKindLegend";
 
 interface Props {
   plan: ArchitecturePlan;
@@ -28,15 +29,14 @@ export function ArchitectureCanvas({ plan, catalogAgents }: Props) {
 
   return (
     <div className="architecture-flow-scope flex-1 min-h-0 min-w-0 flex flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#1e2a3a] bg-[#0f141c]/90 px-3 py-2">
-        <div>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#1e2a3a] bg-[#0f141c]/90 px-3 py-2.5">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
             AI Workflow Graph
           </p>
-          <p className="text-[10px] text-slate-500">
-            Flow → left to right · click a step for details
-          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Flow → left to right</p>
         </div>
+        <ImplementationKindLegend theme="dark" />
         <button
           type="button"
           onClick={onFitToScreen}

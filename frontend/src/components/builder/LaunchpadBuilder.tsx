@@ -264,7 +264,11 @@ export function LaunchpadBuilder({ sessionId }: { sessionId: string }) {
         }
       >
         {!isPresentation ? (
-          <LaunchpadAgentPalette plan={plan} onFocusNode={focusNode} />
+          <LaunchpadAgentPalette
+            plan={plan}
+            catalogAgents={catalogAgents}
+            onFocusNode={focusNode}
+          />
         ) : null}
         <ArchitectureCanvas plan={plan} catalogAgents={catalogAgents} />
         {!isPresentation ? (

@@ -1,5 +1,10 @@
-import { Boxes, Hammer, RefreshCw } from "lucide-react";
+import { Bot, Boxes, Braces, Hammer, RefreshCw, Wrench } from "lucide-react";
 import type { ArchitecturePlan, ReuseDecision } from "@/api/affine/types";
+import type { AgentDef } from "@/types/api";
+import { ImplementationKindLegend } from "@/components/shared/ImplementationKindLegend";
+import { ImplementationKindBadge } from "@/architecture-flow/components/nodes/shared";
+import { KIND_META, classifyAgentDef, type ImplementationKind } from "@/utils/agentKind";
+import { findAgentDef } from "@/utils/stepIo";
 
 function groupDecisions(plan: ArchitecturePlan) {
   const reuse: ReuseDecision[] = [];
@@ -16,25 +21,56 @@ function groupDecisions(plan: ArchitecturePlan) {
 
 function AgentRow({
   decision,
+  catalogAgents,
   onSelect,
 }: {
   decision: ReuseDecision;
+  catalogAgents: AgentDef[];
   onSelect?: (nodeId: string) => void;
 }) {
   const isReuse = decision.decision === "reuse" || decision.decision === "adapt";
+  const catalog = findAgentDef(
+    catalogAgents,
+    decision.agent_id ?? null,
+    decision.agent_name ?? decision.node_label,
+  );
+  const implKind: ImplementationKind | undefined = catalog
+    ? catalog.implementationKind ?? classifyAgentDef(catalog)
+    : undefined;
+  const kindMeta = implKind ? KIND_META[implKind] : null;
+  const KindIcon =
+    implKind === "function" ? Braces : implKind === "tool" ? Wrench : implKind === "agent" ? Bot : null;
+
   return (
     <button
       type="button"
       onClick={() => onSelect?.(decision.node_id)}
-      className="w-full text-left p-2.5 rounded-lg border border-border bg-background hover:border-primary hover:bg-muted/50 transition"
+      className="w-full text-left p-2.5 rounded-lg border border-border bg-background hover:bg-muted/40 transition"
+      style={
+        kindMeta
+          ? { borderLeftWidth: 3, borderLeftColor: kindMeta.solid }
+          : undefined
+      }
     >
       <div className="flex items-start gap-2">
         <div
-          className={`w-8 h-8 rounded-md grid place-items-center shrink-0 text-white ${isReuse ? "bg-[color:var(--color-success)]" : "bg-muted-foreground"}`}
+          className="w-8 h-8 rounded-md grid place-items-center shrink-0 text-white"
+          style={{
+            background: kindMeta
+              ? kindMeta.solid
+              : isReuse
+                ? "var(--color-success)"
+                : "var(--muted-foreground)",
+          }}
         >
-          {isReuse ? <RefreshCw size={14} /> : <Hammer size={14} />}
+          {KindIcon ? <KindIcon size={16} strokeWidth={2.25} /> : isReuse ? <RefreshCw size={14} /> : <Hammer size={14} />}
         </div>
         <div className="min-w-0 flex-1">
+          {implKind ? (
+            <div className="mb-1.5">
+              <ImplementationKindBadge kind={implKind} size="sm" tone="sidebar" />
+            </div>
+          ) : null}
           <div className="text-[12.5px] font-medium leading-tight truncate">
             {decision.node_label}
           </div>
@@ -58,9 +94,11 @@ function AgentRow({
 
 export function LaunchpadAgentPalette({
   plan,
+  catalogAgents = [],
   onFocusNode,
 }: {
   plan: ArchitecturePlan;
+  catalogAgents?: AgentDef[];
   onFocusNode?: (nodeId: string) => void;
 }) {
   const { reuse, build } = groupDecisions(plan);
@@ -75,6 +113,9 @@ export function LaunchpadAgentPalette({
           {plan.graph.nodes.length} steps · {reuse.length} catalog · {build.length}{" "}
           build new
         </p>
+        <div className="mt-3">
+          <ImplementationKindLegend compact />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         <section>
@@ -88,7 +129,12 @@ export function LaunchpadAgentPalette({
               </p>
             ) : (
               reuse.map((d) => (
-                <AgentRow key={d.node_id} decision={d} onSelect={onFocusNode} />
+                <AgentRow
+                  key={d.node_id}
+                  decision={d}
+                  catalogAgents={catalogAgents}
+                  onSelect={onFocusNode}
+                />
               ))
             )}
           </div>
@@ -104,7 +150,12 @@ export function LaunchpadAgentPalette({
               </p>
             ) : (
               build.map((d) => (
-                <AgentRow key={d.node_id} decision={d} onSelect={onFocusNode} />
+                <AgentRow
+                  key={d.node_id}
+                  decision={d}
+                  catalogAgents={catalogAgents}
+                  onSelect={onFocusNode}
+                />
               ))
             )}
           </div>
