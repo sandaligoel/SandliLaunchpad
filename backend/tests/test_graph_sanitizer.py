@@ -1,7 +1,7 @@
 """Tests for graph_sanitizer."""
 
-from schemas.architecture_spec import GraphDraft, GraphEdge, GraphNode
-from services.graph_sanitizer import normalize_node_id, sanitize_graph
+from server import GraphDraft, GraphEdge, GraphNode
+from server import normalize_node_id, sanitize_graph
 
 
 def test_removes_invalid_edges_and_self_loops():

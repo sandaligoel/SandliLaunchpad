@@ -37,7 +37,7 @@ echo "Restart UI if open: cd frontend && npm run dev"
 PYTHONPATH=. python -c "
 from dotenv import load_dotenv
 load_dotenv('.env')
-from services.data_storage import blob_storage_configured, get_storage_status
+from server import blob_storage_configured, get_storage_status
 if not blob_storage_configured():
     print('Storage: LOCAL only — set AZURE_STORAGE_* in backend/.env')
 else:
@@ -51,4 +51,4 @@ else:
         print('  error:', s['error'])
 " 2>/dev/null || echo "Storage: (could not check — run pip install -r requirements.txt)"
 
-exec uvicorn api.main:app --reload --host 127.0.0.1 --port "$API_PORT"
+exec uvicorn server:app --reload --host 127.0.0.1 --port "$API_PORT"

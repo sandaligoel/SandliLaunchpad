@@ -28,6 +28,8 @@ LATEST MESSAGE:
 
 Rules:
 - field_key copied exactly from OPEN GAPS; ask ONLY that topic.
+- Tie the question to the user's problem statement — use their nouns (systems, documents, teams).
+- Do not ask what they already confirmed in CONFIRMED or HISTORY.
 - ready=true only when OPEN GAPS is "(none)".
 
 When more information is needed:

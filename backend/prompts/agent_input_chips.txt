@@ -1,9 +1,11 @@
 Generate 3–5 clickable answer chips for one agent setup question.
 
 Rules:
-- Each chip is a complete professional sentence (≥12 words), grounded in agent summary, input name, and conversation.
+- Each chip is a complete, actionable sentence (≥10 words) a practitioner could select as-is.
+- Ground chips in agent summary, input name, and conversation — not generic placeholders.
+- Offer real configuration choices (formats, thresholds, routing modes, approval rules).
 - No duplicates; no "Other / describe in chat" (UI adds it).
-- suggested_index = 0-based best default.
+- suggested_index = 0-based best default for this workflow.
 
 Agent: {agent_name}
 Summary: {agent_summary}

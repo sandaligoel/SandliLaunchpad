@@ -65,8 +65,30 @@ function isExitNode(n: GraphNode): boolean {
     t.includes("workflow-end") ||
     t.includes("copilot-response") ||
     t.includes("final response") ||
+    /\bdeliver\b/.test(t) ||
+    t.includes("publish") ||
+    t.includes("workbench") ||
+    (t.includes("output") && !t.includes("input")) ||
     n.label.trim().toLowerCase() === "end"
   );
+}
+
+/** True entry / trigger nodes — not terminal deliver/publish steps. */
+function isEntryLike(n: GraphNode): boolean {
+  if (isExitNode(n)) return false;
+  const t = `${n.id} ${n.label} ${n.description || ""}`.toLowerCase();
+  if (n.type === "data_store") return true;
+  if (t.includes("intake") || t.includes("entrypoint") || t.includes("ingest")) return true;
+  if (n.type === "api") {
+    return (
+      t.includes("request") ||
+      t.includes("trigger") ||
+      t.includes("entry") ||
+      t.includes("capture") ||
+      t.includes("start")
+    );
+  }
+  return isIntakeLike(n);
 }
 
 function isMergeNode(n: GraphNode): boolean {
@@ -403,7 +425,12 @@ export function buildGraphStructure(
     }
   }
 
-  const entry = pipelineOrder.filter((n) => n.type === "data_store" || n.type === "api");
+  const boundary = pipelineOrder.filter(
+    (n) => n.type === "data_store" || n.type === "api",
+  );
+  const entry = boundary.filter((n) => isEntryLike(n));
+  const exit = boundary.filter((n) => isExitNode(n));
+  const entryIds = new Set(entry.map((n) => n.id));
   const orch = pipelineOrder.find((n) => n.type === "orchestrator");
   const human = pipelineOrder.find((n) => n.type === "human");
 
@@ -428,15 +455,14 @@ export function buildGraphStructure(
       | "function"
       | "tool"
       | undefined;
-    if (isExitNode(n)) pushNode(n, "merge", "merge", { implementationKind: implKind });
-    else
-      pushNode(n, "input", "input", {
-        implementationKind: implKind ?? "tool",
-      });
+    pushNode(n, "input", "input", {
+      implementationKind: implKind ?? "tool",
+    });
   }
   if (orch) pushNode(orch, "orchestrator", "orchestration");
 
   for (const a of agents) {
+    if (entryIds.has(a.id) || isExitNode(a)) continue;
     let kind = agentKind(a.reuse_decision);
     let lane = classifyAgentLane(a.label, a.description || "", a.type);
     if (isMergeNode(a)) {
@@ -462,6 +488,17 @@ export function buildGraphStructure(
       | "tool"
       | undefined;
     pushNode(human, "human", "hitl", { implementationKind: implKind });
+  }
+
+  for (const n of exit) {
+    const implKind = n.metadata?.implementation_kind as
+      | "agent"
+      | "function"
+      | "tool"
+      | undefined;
+    pushNode(n, "output", "merge", {
+      implementationKind: implKind ?? "tool",
+    });
   }
 
   const addEdge = (

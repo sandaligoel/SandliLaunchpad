@@ -1,7 +1,7 @@
 """P3 chip tier trigger tests (no live LLM)."""
 
-from services.agent_input_chips import MIN_TIER_CHIPS_BEFORE_LLM, _tier12_gated_count
-from services.chip_quality import is_other_chip
+from server import MIN_TIER_CHIPS_BEFORE_LLM, _tier12_gated_count
+from server import is_other_chip
 
 
 def test_tier12_threshold_constant():

@@ -327,20 +327,18 @@ function InterviewPage() {
                 </div>
               ) : null}
               <Textarea
-                rows={8}
-                placeholder="e.g. Pre-screen loan applications using document extraction and policy checks, with analyst review on exceptions…"
+                rows={6}
+                placeholder="Ask a question, request examples, or describe a workflow to build…"
                 value={problem}
                 onChange={(e) => setProblem(e.target.value)}
                 disabled={loading}
               />
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <Button
-                disabled={loading || problem.trim().length < 10}
+                disabled={loading || problem.trim().length < 1}
                 onClick={() => void handleStart(problem.trim())}
               >
-                {loading
-                  ? "Starting interview (30–90s first time)…"
-                  : "Get started"}
+                {loading ? "Starting…" : "Send"}
               </Button>
             </Card>
           </div>

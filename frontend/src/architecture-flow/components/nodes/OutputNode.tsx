@@ -3,7 +3,8 @@ import type { FlowNodeData } from "@/architecture-flow/types/plan";
 import { KIND_META } from "@/utils/agentKind";
 import { KindNodeChrome, NodeShell, StatusDot } from "@/architecture-flow/components/nodes/shared";
 
-export function InputNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
+/** Terminal deliver / publish step — receives the final pipeline output. */
+export function OutputNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
   const kind = data.implementationKind ?? "tool";
   const meta = KIND_META[kind];
 
@@ -17,11 +18,12 @@ export function InputNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
       kindGlow={meta.glow}
     >
       <Handle type="target" position={Position.Left} id="in" className="!w-2.5 !h-2.5" />
-      <Handle type="source" position={Position.Right} id="out" className="!w-2.5 !h-2.5" />
       <KindNodeChrome
         kind={kind}
         roleLabel={
-          <span className="text-[10px] font-bold tracking-widest text-slate-300">INPUT</span>
+          <span className="text-[10px] font-bold tracking-widest text-emerald-300">
+            DELIVER
+          </span>
         }
       >
         <div className="flex items-start justify-between gap-2">

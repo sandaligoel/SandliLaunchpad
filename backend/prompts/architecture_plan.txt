@@ -4,6 +4,8 @@ Inputs: problem statement, completed ArchitectureSpec, interview graph_draft (re
 
 Rules:
 - Connected graph from user trigger to outcome; include HITL gates from hitl_behavior.
+- **Catalog-first:** include **6–8 distinct catalog agents** when matches are provided — chain intake, extraction, validation, enrichment, orchestration, and delivery.
+- Aim for at least 60% of processing steps as reuse or adapt; use build only when no catalog match applies.
 - Always include a final node id `workflow-end` labeled "End" (type gateway) where all branches converge before the user receives the answer.
 - Parallel branches (e.g. SQL vs RAG) must each connect to workflow-end with edges labeled "answer".
 - Per processing step: reuse (catalog fits), adapt (close match), or build (custom).

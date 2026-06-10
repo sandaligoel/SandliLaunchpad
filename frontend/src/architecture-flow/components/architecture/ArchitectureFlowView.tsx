@@ -28,6 +28,7 @@ import {
 import { Maximize2 } from "lucide-react";
 import { AnimatedEdge } from "@/architecture-flow/components/edges/AnimatedEdge";
 import { InputNode } from "@/architecture-flow/components/nodes/InputNode";
+import { OutputNode } from "@/architecture-flow/components/nodes/OutputNode";
 import { OrchestratorNode } from "@/architecture-flow/components/nodes/OrchestratorNode";
 import { AgentNode } from "@/architecture-flow/components/nodes/AgentNode";
 import { MergeNode } from "@/architecture-flow/components/nodes/MergeNode";
@@ -36,10 +37,11 @@ import { ParallelGroupNode } from "@/architecture-flow/components/nodes/Parallel
 import { LaneLabelNode } from "@/architecture-flow/components/nodes/LaneLabelNode";
 import { LaneBandNode } from "@/architecture-flow/components/nodes/LaneBandNode";
 import { SimulationPanel } from "@/architecture-flow/components/panels/SimulationPanel";
-import { ComponentKindLegend } from "@/architecture-flow/components/nodes/shared";
+import { ImplementationKindLegend } from "@/components/shared/ImplementationKindLegend";
 
 const nodeTypes = {
   input: InputNode,
+  output: OutputNode,
   orchestrator: OrchestratorNode,
   "agent-reuse": AgentNode,
   "agent-adapt": AgentNode,
@@ -430,7 +432,7 @@ function FlowInner({
                   />
                 </Panel>
                 <Panel position="top-left" className="!m-2 !p-0 flex flex-col gap-2">
-                  <ComponentKindLegend />
+                  <ImplementationKindLegend theme="dark" />
                   <div className="rounded-md border border-border/80 bg-panel/90 px-2 py-1 text-[10px] text-slate-500 backdrop-blur-sm">
                     {simulating ? (
                       <span className="text-blue-300">Simulation running — follow the blue glow</span>

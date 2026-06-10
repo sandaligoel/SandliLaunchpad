@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
-from config import configure_logging, get_settings
+from server import configure_logging, get_settings
 
 logger = logging.getLogger(__name__)
 

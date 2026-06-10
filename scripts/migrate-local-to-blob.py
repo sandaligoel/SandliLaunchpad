@@ -15,8 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv(CATALOG / ".env")
 
-from schemas.architecture_spec import InterviewSession  # noqa: E402
-from services.data_storage import blob_storage_configured, get_data_storage  # noqa: E402
+from server import InterviewSession, blob_storage_configured, get_data_storage  # noqa: E402
 
 
 def main() -> int:

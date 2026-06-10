@@ -15,16 +15,18 @@ ALREADY ANSWERED:
 {answered}
 
 Rules:
+- Build a realistic multi-agent pipeline: select **3–6 distinct catalog agents** covering intake, processing, validation/enrichment, and delivery when the query warrants it.
+- Prefer chaining complementary agents (e.g. classify → extract → score → rewrite) over a single generalist.
 - Each question maps to a real (agent_id, input_name) from CATALOG.
 - Never repeat answered inputs; skip values obvious from query/history.
 - Skip wired pipeline fields (raw bytes, extracted JSON from upstream steps).
-- Select top 1–3 agents unless a multi-agent chain is clearly required.
+- Ask about business-meaningful inputs only — not internal wiring between agents.
 - questions=[] when required inputs are covered.
 
 {
-  "query_understood": "one sentence",
+  "query_understood": "one sentence restating the user's goal in their domain language",
   "matched_agents": [
-    { "agent_id": "slug-id", "name": "Agent Name", "reason": "one line from function_summary" }
+    { "agent_id": "slug-id", "name": "Agent Name", "reason": "one line from function_summary — why this step is in the chain" }
   ],
   "questions": [
     {

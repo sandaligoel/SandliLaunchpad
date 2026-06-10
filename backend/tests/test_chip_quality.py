@@ -1,6 +1,6 @@
 """Tests for interview chip quality gate."""
 
-from services.chip_quality import (
+from server import (
     OTHER_CHIP,
     gate_chip_list,
     is_other_chip,

@@ -1,16 +1,16 @@
 """Interview questions and chips are stable for the same problem statement."""
 
-from services.clarifying_questions import (
+from server import (
     _deterministic_clarifying_questions,
     chips_for_clarifying_question,
     generate_clarifying_questions,
 )
-from services.agent_workflow_interview import (
+from server import (
     _build_questions_deterministic,
     _match_agents,
 )
-from services.catalog_interview_context import _load_catalog
-from config import get_settings
+from server import _load_catalog
+from server import get_settings
 
 
 PROBLEM = (
@@ -42,8 +42,8 @@ def test_agent_questions_stable_for_same_query():
     settings = get_settings()
     catalog = _load_catalog(settings)
     agents = _match_agents(PROBLEM, catalog)
-    q1 = _build_questions_deterministic(agents, PROBLEM)
-    q2 = _build_questions_deterministic(agents, PROBLEM)
+    q1 = _build_questions_deterministic(agents, PROBLEM, catalog)
+    q2 = _build_questions_deterministic(agents, PROBLEM, catalog)
     assert [(x.agent_id, x.input_name, x.question) for x in q1] == [
         (x.agent_id, x.input_name, x.question) for x in q2
     ]

@@ -12,7 +12,14 @@ Catalog context (internal — cite capability areas only, not SKUs):
 {catalog_context}
 """
 
-Each question needs why_it_matters (one sentence). Omit generic or budget/headcount questions.
+Cover distinct dimensions when relevant to the problem:
+- Primary trigger (API, upload, scheduled job, analyst action)
+- Data sources (SQL, documents, images, external APIs)
+- Human review gates (always, exceptions only, never)
+- Output channel (dashboard, email, API response, report file)
+- Latency / scale (real-time, batch, ad-hoc)
+
+Each question needs why_it_matters (one sentence, user-facing — explain the architecture impact). Omit generic budget/headcount questions.
 
 {
   "questions": [

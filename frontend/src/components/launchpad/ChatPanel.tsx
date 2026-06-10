@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { InterviewSession } from "@/api/affine/types";
 import { isCustomDescribeChip } from "@/api/affine/chipUtils";
+import { ChatMessageContent } from "./ChatMessageContent";
 
 function parseInlineQuestionOptions(question: string): string[] {
   const text = question.trim();
@@ -71,9 +72,17 @@ export function ChatPanel({
   }, [customDescribeMode]);
 
   const ready = session?.spec.status === "ready";
-  const isClarifying = session?.pending_question?.field_key?.startsWith(
-    "clarifying:",
-  );
+  const awaitingRevision = Boolean(session?.awaiting_problem_revision);
+  const isOpenChat =
+    session?.chat_phase === "open" ||
+    (!session?.chat_phase &&
+      !session?.pending_question &&
+      !session?.agent_workflow &&
+      !Object.keys(session?.clarifying_answers ?? {}).length &&
+      !awaitingRevision);
+  const fieldKey = session?.pending_question?.field_key ?? "";
+  const isClarifying =
+    fieldKey.startsWith("clarifying:") || fieldKey.startsWith("discovery:");
   const chips = session?.pending_question?.chips ?? [];
   const inlineChips = parseInlineQuestionOptions(
     session?.pending_question?.question ?? "",
@@ -87,18 +96,32 @@ export function ChatPanel({
   const suggestedChip = session?.pending_question?.suggested_chip?.trim();
   const presetChips = chipsWithOther.filter((c) => !isCustomDescribeChip(c));
   const customChip = chipsWithOther.find(isCustomDescribeChip);
-  const canReply = session && !ready && session.pending_question && !loading;
+  const canReply =
+    session &&
+    !ready &&
+    (isOpenChat || session.pending_question || awaitingRevision) &&
+    !loading;
   const workflow = session?.agent_workflow;
+  const matchedAgents = workflow?.matched_agents ?? [];
+  const totalQuestions = workflow?.questions?.length ?? 0;
+  const answeredCount = workflow
+    ? Object.values(workflow.answers ?? {}).filter((v) => v?.trim()).length
+    : 0;
+  const questionProgress =
+    totalQuestions > 0
+      ? `Question ${Math.min(answeredCount + 1, totalQuestions)} of ${totalQuestions}`
+      : null;
   const nearWorkflowEnd =
     (workflow?.coverage_score ?? 0) >= 70 ||
     (workflow?.critical_items?.length ?? 0) === 0;
   const loadingMessage =
-    session && nearWorkflowEnd
-      ? "Generating your architecture plan (15–30s)…"
-      : "Preparing next question (usually 10–25s)…";
+    session && isOpenChat
+      ? "Thinking…"
+      : session && nearWorkflowEnd
+        ? "Generating your architecture plan (15–30s)…"
+        : "Preparing next question (usually 10–25s)…";
   const topicLabel = session?.pending_question?.topic_label?.trim();
-  const whyItMatters = session?.pending_question?.why_it_matters?.trim();
-  const suggestionReason = session?.pending_question?.suggestion_reason?.trim();
+  const lastMessageIndex = session ? session.messages.length - 1 : -1;
 
   const submitDraft = () => {
     const text = draft.trim();
@@ -125,16 +148,16 @@ export function ChatPanel({
         <header className="chat-panel__header">
           <h2>Chat</h2>
           <p className="chat-panel__subtitle">
-            Describe what you want to automate. We match agents from the catalog and
-            ask setup questions for their inputs — pick an option or type your answer.
+            Ask anything about workflows and agents — like ChatGPT. When you describe
+            what you want to automate, we switch into workflow scoping and builder mode.
           </p>
         </header>
         <div className="chat-start">
-          <label htmlFor="problem">Problem statement</label>
+          <label htmlFor="problem">Message</label>
           <textarea
             id="problem"
-            rows={8}
-            placeholder="e.g. We need an agent to pre-screen KYC applications by extracting UBO relationships from corporate filings and flagging high-risk entities for analyst review…"
+            rows={6}
+            placeholder="Ask a question, request examples, or describe a workflow to build…"
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
             disabled={loading}
@@ -143,10 +166,10 @@ export function ChatPanel({
           <button
             type="button"
             className="btn btn--primary"
-            disabled={loading || problem.trim().length < 10}
+            disabled={loading || problem.trim().length < 1}
             onClick={() => onStart(problem.trim())}
           >
-            {loading ? "Starting…" : "Start chat"}
+            {loading ? "Starting…" : "Send"}
           </button>
         </div>
       </section>
@@ -174,26 +197,78 @@ export function ChatPanel({
         {topicLabel && session.pending_question ? (
           <p className="chat-panel__topic" role="status">
             <span className="chat-panel__topic-label">{topicLabel}</span>
+            {questionProgress ? (
+              <span className="chat-panel__progress">{questionProgress}</span>
+            ) : null}
           </p>
+        ) : null}
+        {matchedAgents.length > 0 ? (
+          <div className="chat-matched-agents" aria-label="Matched catalog agents">
+            <span className="chat-matched-agents__label">Pipeline agents</span>
+            <div className="chat-matched-agents__list">
+              {matchedAgents.slice(0, 8).map((a) => (
+                <span key={a.agent_id} className="chat-matched-agents__pill" title={a.reason}>
+                  {a.name}
+                </span>
+              ))}
+              {matchedAgents.length > 8 ? (
+                <span className="chat-matched-agents__pill chat-matched-agents__pill--more">
+                  +{matchedAgents.length - 8}
+                </span>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </header>
 
       <div className="chat-messages" role="log" aria-live="polite">
-        {session.messages.map((msg, i) => (
-          <div
-            key={`${i}-${msg.role}`}
-            className={`chat-bubble chat-bubble--${msg.role}`}
-          >
-            <span className="chat-bubble__role">
-              {msg.role === "user" ? "You" : "Launchpad"}
-            </span>
-            <p>{msg.content}</p>
-          </div>
-        ))}
+        {session.messages.map((msg, i) => {
+          const pendingQuestion = session.pending_question?.question?.trim();
+          const isVerboseScopingReply =
+            msg.content.includes("Current understanding:") ||
+            msg.content.includes("Still unclear:");
+          const hideDuplicateQuestion =
+            msg.role === "assistant" &&
+            i === lastMessageIndex &&
+            Boolean(session.pending_question) &&
+            !awaitingRevision &&
+            (msg.content.trim() === pendingQuestion ||
+              msg.field_key === session.pending_question?.field_key ||
+              isVerboseScopingReply);
+
+          if (hideDuplicateQuestion) {
+            return null;
+          }
+
+          return (
+            <div
+              key={`${i}-${msg.role}`}
+              className={`chat-bubble chat-bubble--${msg.role}`}
+            >
+              <span className="chat-bubble__role">
+                {msg.role === "user" ? "You" : "Launchpad"}
+              </span>
+              {msg.role === "assistant" ? (
+                <ChatMessageContent content={msg.content} />
+              ) : (
+                <div className="chat-message-content chat-message-content--plain">
+                  {msg.content}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {loading ? (
           <div className="chat-bubble chat-bubble--assistant chat-bubble--typing">
             <span className="chat-bubble__role">Launchpad</span>
-            <p>{loadingMessage}</p>
+            <p>
+              {loadingMessage}
+              <span className="chat-typing-dots" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            </p>
           </div>
         ) : null}
         <div ref={bottomRef} />
@@ -201,12 +276,21 @@ export function ChatPanel({
 
       {error ? <p className="chat-error">{error}</p> : null}
 
-      {session.pending_question && (whyItMatters || suggestionReason) ? (
-        <div className="chat-context-hint" role="note">
-          {whyItMatters ? <p>{whyItMatters}</p> : null}
-          {suggestionReason ? (
-            <p className="chat-context-hint__reason">{suggestionReason}</p>
-          ) : null}
+      {awaitingRevision && !ready ? (
+        <div className="chat-current-question" role="region" aria-label="Update problem statement">
+          <p className="chat-current-question__label">Update problem statement</p>
+          <p className="chat-current-question__text">
+            Paste your new workflow description below. Scoping will restart from the beginning.
+          </p>
+        </div>
+      ) : null}
+
+      {session.pending_question && !ready && !awaitingRevision ? (
+        <div className="chat-current-question" role="region" aria-label="Current question">
+          <p className="chat-current-question__label">Current question</p>
+          <p className="chat-current-question__text">
+            {session.pending_question.question}
+          </p>
         </div>
       ) : null}
 
@@ -222,7 +306,10 @@ export function ChatPanel({
             </p>
           ) : null}
 
-          {!customDescribeMode && (presetChips.length > 0 || customChip) ? (
+          {!isOpenChat &&
+          !awaitingRevision &&
+          !customDescribeMode &&
+          (presetChips.length > 0 || customChip) ? (
             <div className="chip-row" role="group" aria-label="Quick answers">
               {presetChips.map((chip) => {
                 const isSuggested =
@@ -264,15 +351,21 @@ export function ChatPanel({
               submitDraft();
             }}
           >
-            {customDescribeMode ? (
+            {customDescribeMode || awaitingRevision || isOpenChat ? (
               <textarea
                 ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-                rows={3}
-                placeholder="Describe your answer in detail…"
+                rows={awaitingRevision ? 6 : isOpenChat ? 4 : 3}
+                placeholder={
+                  awaitingRevision
+                    ? "Describe the workflow you want to build…"
+                    : isOpenChat
+                      ? "Ask anything or describe a workflow to build…"
+                      : "Describe your answer in detail…"
+                }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 disabled={!canReply}
-                aria-label="Custom answer"
+                aria-label={awaitingRevision ? "New problem statement" : "Custom answer"}
               />
             ) : (
               <input
@@ -282,7 +375,7 @@ export function ChatPanel({
                   canReply
                     ? isClarifying
                       ? "Your answer (1–2 sentences)…"
-                      : "Or type a custom answer…"
+                      : "Type your answer…"
                     : "Waiting for the next question…"
                 }
                 value={draft}
@@ -291,7 +384,7 @@ export function ChatPanel({
               />
             )}
             <div className="chat-compose__actions">
-              {!customDescribeMode && canReply ? (
+              {!isOpenChat && !customDescribeMode && canReply && !awaitingRevision ? (
                 <button
                   type="button"
                   className="btn btn--ghost"

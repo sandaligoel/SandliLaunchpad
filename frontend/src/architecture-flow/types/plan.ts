@@ -88,6 +88,7 @@ export type FlowLane =
 
 export type FlowNodeKind =
   | "input"
+  | "output"
   | "orchestrator"
   | "agent-reuse"
   | "agent-adapt"

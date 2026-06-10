@@ -30,7 +30,7 @@ from azure.search.documents.indexes.models import (
     VectorSearchProfile,
 )
 
-from config import EMBEDDING_DIMENSIONS, configure_logging, get_settings
+from server import EMBEDDING_DIMENSIONS, configure_logging, get_settings
 
 logger = logging.getLogger(__name__)
 

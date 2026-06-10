@@ -80,6 +80,20 @@ export function isClarifyingFieldKey(key: string | null | undefined): boolean {
   return Boolean(key?.startsWith("clarifying:"));
 }
 
+export function isDiscoveryFieldKey(key: string | null | undefined): boolean {
+  return Boolean(key?.startsWith("discovery:"));
+}
+
+export interface DiscoveryState {
+  original_request: string;
+  phase: "active" | "complete";
+  current_understanding: string;
+  missing_information: string[];
+  last_question_reason: string;
+  question_count: number;
+  covered_topics: string[];
+}
+
 export type FieldSource = "problem_statement" | "user_answer" | "inferred";
 
 export interface SpecField {
@@ -289,6 +303,10 @@ export interface InterviewSession {
   clarifying_questions?: ClarifyingQuestionItem[];
   agent_workflow?: AgentWorkflowState | null;
   clarifying_answers?: Record<string, string>;
+  awaiting_problem_revision?: boolean;
+  /** open = general chat; workflow = scoping interview */
+  chat_phase?: "open" | "workflow" | null;
+  discovery?: DiscoveryState | null;
 }
 
 export interface SessionResponse {
