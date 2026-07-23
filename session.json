@@ -1,0 +1,9 @@
+{
+  "session_id": "sess-prompt",
+  "title": "KYC Pipeline",
+  "problem_statement": "Automate document KYC checks",
+  "spec": {
+    "goal": "Automate document KYC checks",
+    "problem_statement": "Automate document KYC checks"
+  }
+}

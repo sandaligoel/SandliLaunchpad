@@ -1,0 +1,9 @@
+{
+  "id": "validate",
+  "label": "Validate KYC",
+  "type": "agent",
+  "inputs": ["validate"],
+  "outputs": ["validate_output"],
+  "reuseDecision": "build",
+  "status": "scaffold"
+}

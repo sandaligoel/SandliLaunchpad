@@ -1,0 +1,37 @@
+{
+  "title": "KYC Pipeline",
+  "problem_statement": "Automate document KYC checks",
+  "execution_order": ["ingest", "validate"],
+  "parallel_groups": [],
+  "loops": [],
+  "nodes": {
+    "ingest": {
+      "type": "build",
+      "package": "agent_library.build.ingest",
+      "entrypoint": "agent_library.build.ingest.agent:entrypoint",
+      "contract": "agent_library/build/ingest/contract.json",
+      "inputs": ["ingest"],
+      "outputs": ["ingest_output"]
+    },
+    "validate": {
+      "type": "build",
+      "package": "agent_library.build.validate",
+      "entrypoint": "agent_library.build.validate.agent:entrypoint",
+      "contract": "agent_library/build/validate/contract.json",
+      "inputs": ["validate"],
+      "outputs": ["validate_output"]
+    }
+  },
+  "edges": [
+    {
+      "id": "e1",
+      "source": "ingest",
+      "target": "validate",
+      "adapter": "adapt_ingest_output_to_validate_input"
+    }
+  ],
+  "graph_inputs": {
+    "ingest": ["file_path", "document_text", "filename"]
+  },
+  "terminal_outputs": ["validate_output"]
+}

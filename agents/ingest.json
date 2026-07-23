@@ -1,0 +1,9 @@
+{
+  "id": "ingest",
+  "label": "Ingest Docs",
+  "type": "agent",
+  "inputs": ["ingest"],
+  "outputs": ["ingest_output"],
+  "reuseDecision": "build",
+  "status": "scaffold"
+}

@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "description": "KYC document completeness policy for pre-screening validation",
+  "required_sections": [
+    "entity_name",
+    "jurisdiction",
+    "registered_address",
+    "incorporation_date",
+    "beneficial_owner"
+  ],
+  "field_patterns": {
+    "entity_name": [
+      "(?i)(?:legal\\s+name|company\\s+name|entity\\s+name|corporate\\s+name)\\s*[:\\-]\\s*(.+)",
+      "(?i)(?:name\\s+of\\s+(?:company|entity|corporation))\\s*[:\\-]\\s*(.+)"
+    ],
+    "jurisdiction": [
+      "(?i)(?:jurisdiction|country\\s+of\\s+incorporation|place\\s+of\\s+incorporation)\\s*[:\\-]\\s*(.+)"
+    ],
+    "registered_address": [
+      "(?i)(?:registered\\s+address|business\\s+address|principal\\s+address)\\s*[:\\-]\\s*(.+)"
+    ],
+    "incorporation_date": [
+      "(?i)(?:date\\s+of\\s+incorporation|incorporation\\s+date|formation\\s+date)\\s*[:\\-]\\s*(.+)"
+    ],
+    "beneficial_owner": [
+      "(?i)(?:beneficial\\s+owner|ultimate\\s+beneficial\\s+owner|ubo)\\s*[:\\-]\\s*(.+)"
+    ]
+  },
+  "minimum_text_length": 100
+}
