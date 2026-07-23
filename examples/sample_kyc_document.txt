@@ -1,0 +1,22 @@
+CORPORATE KYC PRE-SCREENING DOCUMENT
+====================================
+
+Legal Name: Acme Global Holdings Ltd.
+Jurisdiction: United Kingdom
+Registered Address: 10 Finsbury Square, London EC2A 1AF, United Kingdom
+Date of Incorporation: 2018-03-15
+
+Ultimate Beneficial Owner: Jane Smith
+Nationality: British
+Ownership Percentage: 75%
+
+Business Description:
+Acme Global Holdings Ltd. provides cross-border payment facilitation services
+for corporate clients in the European Union and United Kingdom.
+
+Declaration:
+The entity confirms compliance with applicable AML/KYC regulations and declares
+no offshore exposure requiring enhanced due diligence at this time.
+
+Authorized Signatory: John Doe, Chief Compliance Officer
+Submission Date: 2026-03-01

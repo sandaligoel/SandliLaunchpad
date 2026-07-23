@@ -1,0 +1,28 @@
+{
+  "agent_id": "validate",
+  "label": "Validate KYC",
+  "description": "Validate ingested KYC documents against completeness policy.",
+  "entrypoint": "ValidateAgent.run",
+  "inputs": ["validate"],
+  "outputs": ["validate_output"],
+  "input_schema": {
+    "fields": [
+      {
+        "name": "validate",
+        "type": "object",
+        "required": true,
+        "description": "Ingested document payload from upstream ingest node"
+      }
+    ]
+  },
+  "output_schema": {
+    "fields": [
+      {
+        "name": "validate_output",
+        "type": "object",
+        "required": true,
+        "description": "KYC validation result with status and extracted fields"
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "cursor/**"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check placeholders
+        run: python scripts/check_placeholders.py
+
+      - name: Import check
+        run: python -c "import main, run_workflow, config; print('imports ok')"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: Dry run
+        run: python main.py --dry-run

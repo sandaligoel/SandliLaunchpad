@@ -1,0 +1,28 @@
+{
+  "agent_id": "ingest",
+  "label": "Ingest Docs",
+  "description": "Ingest and extract text from KYC documents (PDF, DOCX, TXT).",
+  "entrypoint": "IngestAgent.run",
+  "inputs": ["ingest"],
+  "outputs": ["ingest_output"],
+  "input_schema": {
+    "fields": [
+      {
+        "name": "ingest",
+        "type": "object",
+        "required": true,
+        "description": "Document input with file_path or document_text"
+      }
+    ]
+  },
+  "output_schema": {
+    "fields": [
+      {
+        "name": "ingest_output",
+        "type": "object",
+        "required": true,
+        "description": "Extracted document content and metadata"
+      }
+    ]
+  }
+}
