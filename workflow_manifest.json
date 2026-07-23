@@ -1,0 +1,70 @@
+{
+  "title": "Eryl Semantic Search",
+  "execution_order": [
+    "query-transformer",
+    "eryl-selector",
+    "retriever",
+    "llm-answer-maker",
+    "critic"
+  ],
+  "steps": [
+    {
+      "node_id": "query-transformer",
+      "agent_id": "eryl_semantic_rag_agent_chain",
+      "entrypoint": "ErylChainRunner.run",
+      "module_path": "agent_library.reuse.eryl_semantic_rag_agent_chain.agent",
+      "type": "reuse"
+    },
+    {
+      "node_id": "eryl-selector",
+      "agent_id": "eryl_semantic_rag_agent_chain",
+      "entrypoint": "ErylChainRunner.run",
+      "module_path": "agent_library.reuse.eryl_semantic_rag_agent_chain.agent",
+      "type": "reuse"
+    },
+    {
+      "node_id": "retriever",
+      "agent_id": "eryl_semantic_rag_agent_chain",
+      "entrypoint": "ErylChainRunner.run",
+      "module_path": "agent_library.reuse.eryl_semantic_rag_agent_chain.agent",
+      "type": "reuse"
+    },
+    {
+      "node_id": "llm-answer-maker",
+      "agent_id": "eryl_semantic_rag_agent_chain",
+      "entrypoint": "ErylChainRunner.run",
+      "module_path": "agent_library.reuse.eryl_semantic_rag_agent_chain.agent",
+      "type": "reuse"
+    },
+    {
+      "node_id": "critic",
+      "agent_id": "eryl_semantic_rag_agent_chain",
+      "entrypoint": "ErylChainRunner.run",
+      "module_path": "agent_library.reuse.eryl_semantic_rag_agent_chain.agent",
+      "type": "reuse"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "query-transformer",
+      "target": "eryl-selector"
+    },
+    {
+      "id": "e2",
+      "source": "eryl-selector",
+      "target": "retriever"
+    },
+    {
+      "id": "e3",
+      "source": "retriever",
+      "target": "llm-answer-maker"
+    },
+    {
+      "id": "e4",
+      "source": "llm-answer-maker",
+      "target": "critic"
+    }
+  ],
+  "node_count": 5
+}

@@ -1,0 +1,9 @@
+{
+  "node_id": "query-transformer",
+  "label": "Query Transformer",
+  "type": "reuse",
+  "agent_id": "eryl_semantic_rag_agent_chain",
+  "inputs": ["user_question"],
+  "outputs": ["transformed_query"],
+  "explanation": "Rewrites the user question into a search-optimized form for semantic retrieval."
+}

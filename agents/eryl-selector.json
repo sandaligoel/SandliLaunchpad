@@ -1,0 +1,9 @@
+{
+  "node_id": "eryl-selector",
+  "label": "Eryl Agent (Selector)",
+  "type": "reuse",
+  "agent_id": "eryl_semantic_rag_agent_chain",
+  "inputs": ["transformed_query"],
+  "outputs": ["retrieval_strategy", "routing_hints"],
+  "explanation": "Selector agent routes between vector and graph retrieval strategies for the question."
+}

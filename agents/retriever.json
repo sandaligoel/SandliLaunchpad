@@ -1,0 +1,9 @@
+{
+  "node_id": "retriever",
+  "label": "Retriever",
+  "type": "reuse",
+  "agent_id": "eryl_semantic_rag_agent_chain",
+  "inputs": ["transformed_query", "retrieval_strategy"],
+  "outputs": ["retrieved_passages", "citations"],
+  "explanation": "Runs extract_context to fetch passages from Azure AI Search (vector + graph)."
+}

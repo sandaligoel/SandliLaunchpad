@@ -1,0 +1,9 @@
+{
+  "node_id": "critic",
+  "label": "Critic Agent",
+  "type": "reuse",
+  "agent_id": "eryl_semantic_rag_agent_chain",
+  "inputs": ["draft_answer", "retrieved_passages"],
+  "outputs": ["final_answer", "confidence_score"],
+  "explanation": "Critic agent scores answer quality, grounding, and flags low-confidence responses."
+}

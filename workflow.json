@@ -1,0 +1,71 @@
+{
+  "session_id": "sess-tpl-eryl-live",
+  "title": "Eryl Semantic Search",
+  "problem_statement": "Query transform → vector/graph retrieve → answer → critic evaluation",
+  "architecture_plan": {
+    "graph": {
+      "nodes": [
+        {
+          "id": "query-transformer",
+          "label": "Query Transformer",
+          "type": "agent",
+          "inputs": ["user_question"],
+          "outputs": ["transformed_query"],
+          "agent_id": "eryl_semantic_rag_agent_chain"
+        },
+        {
+          "id": "eryl-selector",
+          "label": "Eryl Agent (Selector)",
+          "type": "agent",
+          "inputs": ["transformed_query"],
+          "outputs": ["retrieval_strategy", "routing_hints"],
+          "agent_id": "eryl_semantic_rag_agent_chain"
+        },
+        {
+          "id": "retriever",
+          "label": "Retriever",
+          "type": "agent",
+          "inputs": ["transformed_query", "retrieval_strategy"],
+          "outputs": ["retrieved_passages", "citations"],
+          "agent_id": "eryl_semantic_rag_agent_chain"
+        },
+        {
+          "id": "llm-answer-maker",
+          "label": "LLM Answer Maker",
+          "type": "agent",
+          "inputs": ["retrieved_passages", "user_question"],
+          "outputs": ["draft_answer"],
+          "agent_id": "eryl_semantic_rag_agent_chain"
+        },
+        {
+          "id": "critic",
+          "label": "Critic Agent",
+          "type": "agent",
+          "inputs": ["draft_answer", "retrieved_passages"],
+          "outputs": ["final_answer", "confidence_score"],
+          "agent_id": "eryl_semantic_rag_agent_chain"
+        }
+      ],
+      "edges": [
+        {"id": "e1", "source": "query-transformer", "target": "eryl-selector"},
+        {"id": "e2", "source": "eryl-selector", "target": "retriever"},
+        {"id": "e3", "source": "retriever", "target": "llm-answer-maker"},
+        {"id": "e4", "source": "llm-answer-maker", "target": "critic"}
+      ],
+      "execution_order": [
+        "query-transformer",
+        "eryl-selector",
+        "retriever",
+        "llm-answer-maker",
+        "critic"
+      ],
+      "parallel_groups": [],
+      "loops": []
+    }
+  },
+  "spec": {
+    "goal": "Semantic search Q&A with query transform, retrieval, answer generation, and critic evaluation",
+    "inputs": ["user_question"],
+    "outputs": ["final_answer", "confidence_score"]
+  }
+}

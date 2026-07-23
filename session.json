@@ -1,0 +1,25 @@
+{
+  "session_id": "sess-tpl-eryl-live",
+  "title": "Eryl Semantic Search",
+  "interview_spec": {
+    "goal": "Query transform → vector/graph retrieve → answer → critic evaluation"
+  },
+  "architecture_plan": {
+    "graph": {
+      "nodes": [
+        {"id": "query-transformer", "label": "Query Transformer", "type": "agent"},
+        {"id": "eryl-selector", "label": "Eryl Agent (Selector)", "type": "agent"},
+        {"id": "retriever", "label": "Retriever", "type": "agent"},
+        {"id": "llm-answer-maker", "label": "LLM Answer Maker", "type": "agent"},
+        {"id": "critic", "label": "Critic Agent", "type": "agent"}
+      ],
+      "execution_order": [
+        "query-transformer",
+        "eryl-selector",
+        "retriever",
+        "llm-answer-maker",
+        "critic"
+      ]
+    }
+  }
+}

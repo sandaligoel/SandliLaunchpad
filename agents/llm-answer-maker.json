@@ -1,0 +1,9 @@
+{
+  "node_id": "llm-answer-maker",
+  "label": "LLM Answer Maker",
+  "type": "reuse",
+  "agent_id": "eryl_semantic_rag_agent_chain",
+  "inputs": ["retrieved_passages", "user_question"],
+  "outputs": ["draft_answer"],
+  "explanation": "Generates a grounded natural-language answer from retrieved context."
+}

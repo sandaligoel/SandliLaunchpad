@@ -1,0 +1,4 @@
+# Minimal vector routing metadata for Eryl selector (static reference data).
+index=mars-demo
+semantic_config=my-semantic-config
+default_strategy=vector
