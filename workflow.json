@@ -1,0 +1,38 @@
+{
+  "session_id": "sess-prompt",
+  "title": "KYC Pipeline",
+  "problem_statement": "Automate document KYC checks",
+  "architecture_plan": {
+    "graph": {
+      "nodes": [
+        {
+          "id": "ingest",
+          "label": "Ingest Docs",
+          "type": "agent"
+        },
+        {
+          "id": "validate",
+          "label": "Validate KYC",
+          "type": "agent"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "source": "ingest",
+          "target": "validate"
+        }
+      ],
+      "execution_order": [
+        "ingest",
+        "validate"
+      ],
+      "parallel_groups": [],
+      "loops": []
+    },
+    "reuse_decisions": null
+  },
+  "spec": {
+    "problem_statement": "Automate document KYC checks"
+  }
+}

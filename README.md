@@ -1,49 +1,111 @@
-# AFFINE — Agent Launchpad
+# KYC Pipeline
 
-Agent requirements interview, architecture planning, and visual workflow builder for Affine Analytics.
+Automate document KYC checks with a two-step workflow:
 
-## Repository layout
-
-```
-AFFINE/
-├── backend/          # Python FastAPI — interview, catalog, Azure storage
-├── frontend/         # React (Vite) — Agent Launchpad UI
-├── config/           # Dev port defaults + runtime-ports.json (auto)
-├── scripts/          # start-backend, sync-dev-env, doctor
-└── docs/             # Setup and architecture guides
-```
+1. **Ingest Docs** — parse PDF, DOCX, TXT, or JSON KYC documents and extract identity fields.
+2. **Validate KYC** — apply completeness and format checks against configurable KYC rules.
 
 ## Quick start
 
-**Guide:** [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md) · **Ports/health:** `./scripts/doctor.sh`
-
 ```bash
-# One-time
-./scripts/sync-dev-env.sh
-cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-cp .env.example .env   # Azure keys — see docs/WHAT_TO_SHARE.md
-cd ../frontend && npm install
-
-# Every day — 2 terminals
-./scripts/start-backend.sh
-cd frontend && npm run dev
+git clone <this-repo>
+cd <repo-root>
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python main.py --health
+python main.py --file examples/sample_kyc.txt
 ```
 
-| Screen | URL |
-|--------|-----|
-| Agent Launchpad (chat) | http://localhost:5173/interview |
-| Workflow builder | http://localhost:5173/builder |
-| Workflows (saved) | http://localhost:5173/workflows |
+Expected live run output includes `ingest_output` with extracted fields and `validate_output.status` of `pass` for the bundled sample document.
 
-Ports: [config/dev-ports.json](config/dev-ports.json) + gitignored `config/runtime-ports.json`. After backend restarts, run `./scripts/sync-dev-env.sh` and restart `npm run dev`.
+## CLI
 
-## Docs
+```bash
+python main.py --help
+python main.py --health
+python main.py --dry-run
+python main.py --file examples/sample_kyc.txt
+python main.py --input-json examples/sample_payload.json
+python main.py --node validate --input-json examples/sample_payload.json
+```
 
-- [START.md](START.md) — short daily commands
-- [docs/STORAGE_ARCHITECTURE.md](docs/STORAGE_ARCHITECTURE.md) — API + Azure persistence
-- [docs/EMPLOYEE_SETUP.md](docs/EMPLOYEE_SETUP.md) — full onboarding
-- [backend/README.md](backend/README.md) — catalog index & pipeline
+`--dry-run` executes the full ingest → validate orchestration against `examples/sample_kyc.txt` without external service calls.
 
-## Azure
+## HTTP API
 
-Sessions and workflows persist to **Azure Blob** when `backend/.env` has `DATA_STORAGE_BACKEND=blob` and valid storage credentials.
+Start the server:
+
+```bash
+python main.py --serve --host 127.0.0.1 --port 8080
+```
+
+Endpoints:
+
+- `GET /health` — dependency health summary
+- `POST /ingest` — intake endpoint (`document_path` or `ingest` body)
+- `POST /validate` — terminal validation endpoint (`validate` or `ingest_output` body)
+- `POST /workflow/{node_id}` — generic workflow entrypoint
+
+Example:
+
+```bash
+curl -s http://127.0.0.1:8080/health
+curl -s -X POST http://127.0.0.1:8080/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"document_path":"examples/sample_kyc.txt"}'
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` and adjust optional validation settings:
+
+| Variable | Purpose |
+|----------|---------|
+| `APP_NAME` | Application display name |
+| `LOG_LEVEL` | Logging verbosity |
+| `KYC_REQUIRED_FIELDS` | Comma-separated required identity fields |
+| `KYC_ID_PATTERN` | Regex for government ID validation |
+| `KYC_MIN_DOCUMENT_TEXT_LENGTH` | Minimum extracted text length |
+
+No cloud credentials are required for the default local document workflow.
+
+## Project layout
+
+```
+main.py
+config.py
+run_workflow.py
+workflow.json
+workflow_manifest.json
+agent_library/
+  base/
+  build/ingest/
+  build/validate/
+  reuse/
+agent_runtime/adapters.py
+integrations/
+examples/
+tests/
+scripts/check_placeholders.py
+Makefile
+```
+
+## Development
+
+```bash
+make install
+make check
+make test
+make dry-run
+make verify
+```
+
+## Workflow graph
+
+```
+ingest → validate
+```
+
+Export metadata is preserved in `workflow.json`, `session.json`, and `agents/*.json`.

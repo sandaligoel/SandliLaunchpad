@@ -1,0 +1,6 @@
+Full Name: Jane Doe
+Government ID: AB1234567
+Date of Birth: 1990-05-14
+Address: 123 Market Street, San Francisco, CA 94105
+
+This KYC submission confirms identity details for automated review.

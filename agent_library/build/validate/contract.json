@@ -1,0 +1,36 @@
+{
+  "agent_id": "validate",
+  "label": "Validate KYC",
+  "entrypoint": "agent_library.build.validate.agent.execute",
+  "inputs": ["validate"],
+  "outputs": ["validate_output"],
+  "input_schema": {
+    "fields": [
+      {
+        "name": "validate",
+        "type": "object",
+        "required": true,
+        "properties": {
+          "text_content": {"type": "string"},
+          "extracted_fields": {"type": "object"}
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "fields": [
+      {
+        "name": "validate_output",
+        "type": "object",
+        "required": true,
+        "properties": {
+          "status": {"type": "string"},
+          "checks": {"type": "array"},
+          "missing_fields": {"type": "array"},
+          "issues": {"type": "array"},
+          "extracted_fields": {"type": "object"}
+        }
+      }
+    ]
+  }
+}

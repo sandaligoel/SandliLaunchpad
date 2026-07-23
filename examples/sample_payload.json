@@ -1,0 +1,5 @@
+{
+  "ingest": {
+    "document_path": "examples/sample_kyc.txt"
+  }
+}

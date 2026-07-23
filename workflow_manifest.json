@@ -1,0 +1,30 @@
+{
+  "title": "KYC Pipeline",
+  "execution_order": [
+    "ingest",
+    "validate"
+  ],
+  "nodes": [
+    {
+      "id": "ingest",
+      "label": "Ingest Docs",
+      "type": "agent",
+      "implementation": "/workspace/agent_library/build/ingest",
+      "entrypoint": "agent_library.build.ingest.agent.execute"
+    },
+    {
+      "id": "validate",
+      "label": "Validate KYC",
+      "type": "agent",
+      "implementation": "/workspace/agent_library/build/validate",
+      "entrypoint": "agent_library.build.validate.agent.execute"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "ingest",
+      "target": "validate"
+    }
+  ]
+}

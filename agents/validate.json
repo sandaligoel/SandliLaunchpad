@@ -1,0 +1,23 @@
+{
+  "id": "validate",
+  "label": "Validate KYC",
+  "type": "build",
+  "inputs": [
+    {
+      "name": "validate",
+      "type": "unknown",
+      "required": true,
+      "description": "Validate KYC"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "validate_output",
+      "type": "unknown",
+      "required": false,
+      "description": "Validate KYC"
+    }
+  ],
+  "reuse_decision": "build",
+  "explanation": "Build KYC validation for ingested documents"
+}

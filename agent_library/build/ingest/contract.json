@@ -1,0 +1,35 @@
+{
+  "agent_id": "ingest",
+  "label": "Ingest Docs",
+  "entrypoint": "agent_library.build.ingest.agent.execute",
+  "inputs": ["ingest"],
+  "outputs": ["ingest_output"],
+  "input_schema": {
+    "fields": [
+      {
+        "name": "ingest",
+        "type": "object",
+        "required": true,
+        "properties": {
+          "document_path": {"type": "string", "required": true}
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "fields": [
+      {
+        "name": "ingest_output",
+        "type": "object",
+        "required": true,
+        "properties": {
+          "document_path": {"type": "string"},
+          "document_type": {"type": "string"},
+          "text_content": {"type": "string"},
+          "metadata": {"type": "object"},
+          "extracted_fields": {"type": "object"}
+        }
+      }
+    ]
+  }
+}

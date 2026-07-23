@@ -1,0 +1,23 @@
+{
+  "id": "ingest",
+  "label": "Ingest Docs",
+  "type": "build",
+  "inputs": [
+    {
+      "name": "ingest",
+      "type": "unknown",
+      "required": true,
+      "description": "Ingest Docs"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "ingest_output",
+      "type": "unknown",
+      "required": false,
+      "description": "Ingest Docs"
+    }
+  ],
+  "reuse_decision": "build",
+  "explanation": "Build document ingestion for KYC pipeline"
+}
